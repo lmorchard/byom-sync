@@ -1,14 +1,11 @@
-# {{ .Title }}
-
-_Generated: {{ .Generated }}_
-
+---
+title: "{{ .Title }}"
+creator: "{{ .Creator }}"
+date: "{{ .Date }}"
 ---
 
-{{ range .Items -}}
-## {{ .Name }}
-
-{{ .Description }}
-
----
-
+| Title | Artist | Album |
+|-------|--------|-------|
+{{ range .Tracks -}}
+| {{ .Title }} | {{ .Artist }} | {{ .Album }} |
 {{ end -}}

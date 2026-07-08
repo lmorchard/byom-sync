@@ -46,6 +46,11 @@ func Load(dir string) ([]Playlist, error) {
 	return playlists, nil
 }
 
+// LoadFile reads a single playlist YAML file.
+func LoadFile(path string) (Playlist, error) {
+	return loadFile(path)
+}
+
 func loadFile(path string) (Playlist, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {

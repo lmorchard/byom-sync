@@ -184,15 +184,15 @@ type jspfTrack struct {
 ```
 
 **Verification — automated:**
-- [ ] `make test`: m3u8 output has `#EXTM3U` header, one `#EXTINF` + path per track, path = `<prefix>/<Artist>/<Album>/<Title>.<ext>`, `--ext` override respected
-- [ ] `make test`: jspf is valid JSON, `identifier` = `["urn:isrc:<isrc>"]`, duration in seconds, `identifier` omitted when ISRC empty
-- [ ] `make test`: hugo output has YAML frontmatter + a tracklist table row per track
-- [ ] `make test`: dir-mode input writes one output file per input YAML
-- [ ] `make lint` passes
+- [x] `make test`: m3u8 output has `#EXTM3U` header, one `#EXTINF` + path per track, path = `<prefix>/<Artist>/<Album>/<Title>.<ext>`, `--ext` override respected
+- [x] `make test`: jspf is valid JSON, `identifier` = `["urn:isrc:<isrc>"]`, duration in seconds, `identifier` omitted when ISRC empty
+- [x] `make test`: hugo output has YAML frontmatter + a tracklist table row per track
+- [x] `make test`: dir-mode input writes one output file per input YAML
+- [x] `make lint` passes
 
 **Verification — manual:**
-- [ ] Hand-author a `sample.yaml`, run all three `export` subcommands, eyeball each output
-- [ ] `byom-sync export m3u8 --input sample.yaml --out out.m3u8 --lib-prefix /mnt/nas/music` produces expected paths
+- [x] Hand-author a `sample.yaml`, run all three `export` subcommands, eyeball each output
+- [x] `byom-sync export m3u8 --input sample.yaml --out out.m3u8 --lib-prefix /mnt/nas/music` produces expected paths
 
 ---
 
