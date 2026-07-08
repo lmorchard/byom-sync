@@ -62,6 +62,18 @@ authorizing account in the **User Management** allowlist (missing user → gener
 `server_error` after consent). Fixed by adding the account + waiting for
 propagation. No byom-sync code change was needed.
 
+### Torture test (8312-track playlist)
+Synced a 8312-track playlist in ~46s — pagination (~84 pages) + WithRetry(true)
+429 handling solid, no drops. 1.5M YAML. jspf/hugo emit all 8312; m3u8 emits
+8310 because it intentionally skips 2 empty-title tracks.
+
+### Future refinement (NOT this session): catalog-removed stub tracks
+Spotify returns some playlist slots as tracks with empty title AND empty artist
+(catalog-removed items, e.g. album "Deep Forest" with no title/artist). We store
+them faithfully, but they're noise: m3u8 skips them (can't form a file path),
+jspf/hugo include them. Consider filtering title+artist-empty tracks at fetch
+time, or marking them, in a future session. Discovered via the torture test.
+
 ### Test artifacts left in ./playlists/ (gitignored)
 `today-s-top-hits.yaml`, `bleep-bloop-bop-synthpop.yaml` — from verification.
 `*.yaml` is gitignored so they won't be committed; delete if unwanted.
