@@ -1,0 +1,24 @@
+# Configuration file for byom-sync
+# Copy this to byom-sync.yaml and customize as needed.
+# byom-sync also looks for this file at $XDG_CONFIG_HOME/byom-sync/byom-sync.yaml.
+
+# Spotify application client ID (from https://developer.spotify.com/dashboard).
+# Register a redirect URI of http://127.0.0.1:8888/callback for the auth flow.
+client_id: "your-spotify-client-id"
+
+# Local port for the OAuth callback server (must match the registered redirect URI).
+redirect_port: 8888
+
+# Directory where per-playlist YAML files are stored / synced.
+dir: "./playlists"
+
+# Playlists to sync when `byom-sync sync` is run with no positional arguments.
+# Accepts raw IDs, spotify:playlist:<id> URIs, or open.spotify.com URLs.
+playlists:
+  - "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M"
+  # - "spotify:playlist:37i9dQZF1DX0XUsuxWHRQd"
+
+# Logging configuration
+verbose: false
+debug: false
+log_json: false
