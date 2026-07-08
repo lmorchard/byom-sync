@@ -2,7 +2,8 @@
 
 **Bring Your Own Music.** A Go CLI that pulls your Spotify playlists into local,
 Git-friendly YAML files, then compiles those files into other formats: M3U8 for
-local media servers, JSPF for web components, and Hugo Markdown for static sites.
+local media servers, JSPF for web components, and Markdown with YAML frontmatter
+for static site generators.
 
 The idea is a hub and spoke: Spotify is one source, your YAML files are the hub
 (the source of truth you own and can version-control), and the exporters are
@@ -25,7 +26,7 @@ orphaned, so your history survives even when Spotify's catalog changes.
   never breaks re-sync)
 - Two sync strategies: `archive` (append-only, soft-orphans removed tracks) and
   `mirror` (exact overwrite)
-- Exporters for M3U8, JSPF, and Hugo Markdown
+- Exporters for M3U8, JSPF, and Markdown with YAML frontmatter
 
 ## Install
 
@@ -132,8 +133,8 @@ byom-sync export m3u8 --input playlist.yaml --out playlist.m3u8 --lib-prefix /mu
 # JSPF JSON
 byom-sync export jspf --input ./playlists --out ./jspf
 
-# Hugo Markdown (frontmatter + tracklist table)
-byom-sync export hugo --input ./playlists --out ./content/playlists
+# Markdown with YAML frontmatter + tracklist table (Hugo and similar)
+byom-sync export markdown --input ./playlists --out ./content/playlists
 ```
 
 `--input` may be a single YAML file or a directory. When it's a directory,
@@ -179,7 +180,7 @@ values carry the real curation history.
 
 - Read-only: `byom-sync` never writes back to Spotify.
 - Tracks removed from Spotify's catalog can appear as empty-title entries; M3U8
-  skips them (no usable path), while JSPF and Hugo include them.
+  skips them (no usable path), while JSPF and Markdown include them.
 - Exporters don't yet surface `added_at` or `spotify_url`.
 
 ## Development

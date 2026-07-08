@@ -7,7 +7,7 @@ import (
 
 var exportCmd = &cobra.Command{
 	Use:   "export",
-	Short: "Compile playlist YAML into destination formats (m3u8, jspf, hugo)",
+	Short: "Compile playlist YAML into destination formats (m3u8, jspf, markdown)",
 	Long: `Compile the local playlist "hub" (YAML) into destination "spoke" formats.
 
 --input may be a single YAML file or a directory of them. When it is a directory,
@@ -40,20 +40,20 @@ var exportJSPFCmd = &cobra.Command{
 	},
 }
 
-var exportHugoCmd = &cobra.Command{
-	Use:   "hugo",
-	Short: "Export to Hugo Markdown (frontmatter + tracklist table)",
+var exportMarkdownCmd = &cobra.Command{
+	Use:   "markdown",
+	Short: "Export to Markdown with YAML frontmatter + tracklist table",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg := map[string]string{"template": exportTmpl}
-		return export.Run(export.HugoExporter{}, "md", exportInput, exportOut, cfg)
+		return export.Run(export.MarkdownExporter{}, "md", exportInput, exportOut, cfg)
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(exportCmd)
-	exportCmd.AddCommand(exportM3U8Cmd, exportJSPFCmd, exportHugoCmd)
+	exportCmd.AddCommand(exportM3U8Cmd, exportJSPFCmd, exportMarkdownCmd)
 
-	for _, c := range []*cobra.Command{exportM3U8Cmd, exportJSPFCmd, exportHugoCmd} {
+	for _, c := range []*cobra.Command{exportM3U8Cmd, exportJSPFCmd, exportMarkdownCmd} {
 		c.Flags().StringVar(&exportInput, "input", "", "input playlist YAML file or directory (required)")
 		c.Flags().StringVar(&exportOut, "out", "", "output file (file input) or directory (dir input) (required)")
 		_ = c.MarkFlagRequired("input")
@@ -64,5 +64,5 @@ func init() {
 	exportM3U8Cmd.Flags().StringVar(&exportExt, "ext", "flac", "media file extension for constructed paths")
 	_ = exportM3U8Cmd.MarkFlagRequired("lib-prefix")
 
-	exportHugoCmd.Flags().StringVar(&exportTmpl, "template", "", "custom Hugo template file (default: embedded)")
+	exportMarkdownCmd.Flags().StringVar(&exportTmpl, "template", "", "custom Markdown template file (default: embedded)")
 }

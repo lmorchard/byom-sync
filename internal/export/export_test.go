@@ -112,10 +112,10 @@ func TestJSPFExport(t *testing.T) {
 	}
 }
 
-func TestHugoExport(t *testing.T) {
+func TestMarkdownExport(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out.md")
-	if err := (HugoExporter{}).Export(samplePlaylist(), out, nil); err != nil {
+	if err := (MarkdownExporter{}).Export(samplePlaylist(), out, nil); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := os.ReadFile(out)

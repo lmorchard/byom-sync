@@ -1,5 +1,5 @@
 // Package export compiles the local playlist "hub" (YAML) into destination
-// "spoke" formats: M3U8, JSPF, and Hugo Markdown.
+// "spoke" formats: M3U8, JSPF, and Markdown (with YAML frontmatter).
 package export
 
 import (
@@ -12,7 +12,7 @@ import (
 )
 
 // Exporter renders a single playlist to outputPath. cfg carries format-specific
-// options (e.g. "lib_prefix" and "ext" for M3U8, "template" for Hugo).
+// options (e.g. "lib_prefix" and "ext" for M3U8, "template" for Markdown).
 type Exporter interface {
 	Export(p playlist.Playlist, outputPath string, cfg map[string]string) error
 }
