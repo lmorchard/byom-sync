@@ -179,9 +179,8 @@ values carry the real curation history.
 ## Limitations
 
 - Read-only: `byom-sync` never writes back to Spotify.
-- Tracks removed from Spotify's catalog can appear as empty-title entries; M3U8
-  skips them (no usable path), while JSPF and Markdown include them.
-- Exporters don't yet surface `added_at` or `spotify_url`.
+- Tracks removed from Spotify's catalog (empty title, no artists) are skipped at
+  sync time, since they carry no usable metadata.
 
 ## Development
 
