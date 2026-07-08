@@ -82,7 +82,7 @@ func RunInteractiveFlow(ctx context.Context, clientID string, port int) error {
 				resultCh <- result{err: fmt.Errorf("token exchange: %w", err)}
 				return
 			}
-			fmt.Fprintln(w, "byom-sync: authentication complete. You can close this tab.")
+			_, _ = fmt.Fprintln(w, "byom-sync: authentication complete. You can close this tab.")
 			resultCh <- result{tok: tok}
 		})
 	})
