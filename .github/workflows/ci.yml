@@ -39,7 +39,8 @@ jobs:
         if: steps.check_commit.outputs.skip != 'true'
         uses: golangci/golangci-lint-action@v8
         with:
-          version: latest
+          # Keep in sync with GOLANGCI_LINT_VERSION in Makefile
+          version: v2.12.2
           args: --timeout=5m
 
       - name: Run tests

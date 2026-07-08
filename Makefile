@@ -6,6 +6,9 @@ COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 BUILD_DATE := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 LDFLAGS := -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(BUILD_DATE)
 
+# Pinned tool versions (keep GOLANGCI_LINT_VERSION in sync with .github/workflows/ci.yml)
+GOLANGCI_LINT_VERSION := v2.12.2
+
 
 # Default target
 all: build
@@ -14,7 +17,7 @@ all: build
 setup:
 	@echo "Installing development tools..."
 	@go install mvdan.cc/gofumpt@latest
-	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	@go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 	@echo "✅ Development tools installed"
 
 # Build the application
