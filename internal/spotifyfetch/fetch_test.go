@@ -32,6 +32,25 @@ func TestParseID(t *testing.T) {
 	}
 }
 
+func TestSelectOwnedIDs(t *testing.T) {
+	playlists := []spotify.SimplePlaylist{
+		{ID: "mine1", Owner: spotify.User{ID: "les"}},
+		{ID: "followed1", Owner: spotify.User{ID: "spotify"}},
+		{ID: "mine2", Owner: spotify.User{ID: "les"}},
+		{ID: "followed2", Owner: spotify.User{ID: "someoneelse"}},
+	}
+
+	owned := selectOwnedIDs(playlists, "les", false)
+	if len(owned) != 2 || owned[0] != "mine1" || owned[1] != "mine2" {
+		t.Errorf("owned-only should return [mine1 mine2], got %v", owned)
+	}
+
+	all := selectOwnedIDs(playlists, "les", true)
+	if len(all) != 4 {
+		t.Errorf("include-followed should return all 4, got %v", all)
+	}
+}
+
 func TestConvert(t *testing.T) {
 	ft := &spotify.FullTrack{}
 	ft.Name = "My Song"

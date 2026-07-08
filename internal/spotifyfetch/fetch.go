@@ -75,6 +75,40 @@ func Fetch(ctx context.Context, c *spotify.Client, id spotify.ID) (playlist.Play
 	return out, nil
 }
 
+// ListMyPlaylists returns the IDs of the current user's playlists (following
+// pagination). When includeFollowed is false, only playlists owned by the
+// current user are returned, excluding followed/algorithmic playlists.
+func ListMyPlaylists(ctx context.Context, c *spotify.Client, includeFollowed bool) ([]string, error) {
+	me, err := c.CurrentUser(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get current user: %w", err)
+	}
+
+	var all []spotify.SimplePlaylist
+	page, err := c.CurrentUsersPlaylists(ctx)
+	for err == nil {
+		all = append(all, page.Playlists...)
+		err = c.NextPage(ctx, page)
+	}
+	if err != nil && !errors.Is(err, spotify.ErrNoMorePages) {
+		return nil, fmt.Errorf("list playlists: %w", err)
+	}
+
+	return selectOwnedIDs(all, me.ID, includeFollowed), nil
+}
+
+// selectOwnedIDs returns the IDs of playlists owned by userID (or all of them
+// when includeFollowed is true).
+func selectOwnedIDs(playlists []spotify.SimplePlaylist, userID string, includeFollowed bool) []string {
+	ids := make([]string, 0, len(playlists))
+	for _, pl := range playlists {
+		if includeFollowed || pl.Owner.ID == userID {
+			ids = append(ids, string(pl.ID))
+		}
+	}
+	return ids
+}
+
 func convert(item spotify.PlaylistItem) playlist.Track {
 	ft := item.Track.Track
 	return playlist.Track{

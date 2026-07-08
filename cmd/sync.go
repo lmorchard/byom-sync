@@ -15,8 +15,10 @@ import (
 )
 
 var (
-	syncDir      string
-	syncStrategy string
+	syncDir         string
+	syncStrategy    string
+	syncAll         bool
+	syncIncludeFoll bool
 )
 
 var syncCmd = &cobra.Command{
@@ -27,6 +29,8 @@ var syncCmd = &cobra.Command{
 With no arguments, syncs the playlists listed under ` + "`playlists`" + ` in the config.
 With one or more arguments (IDs, spotify:playlist: URIs, or open.spotify.com URLs),
 syncs exactly those, ignoring the config list.
+With --all, syncs every playlist you own (add --include-followed for followed and
+algorithmic playlists too); --all cannot be combined with arguments.
 
 Strategies:
   archive (default)  append-only; tracks removed upstream are kept and marked
@@ -60,9 +64,18 @@ func runSync(ctx context.Context, args []string) error {
 		return fmt.Errorf("invalid strategy %q (want archive or mirror)", syncStrategy)
 	}
 
-	targets := selectTargets(args, viper.GetStringSlice("playlists"))
-	if len(targets) == 0 {
-		return fmt.Errorf("no playlists to sync (pass IDs/URLs as arguments or set `playlists` in config)")
+	if syncAll && len(args) > 0 {
+		return fmt.Errorf("cannot combine --all with explicit playlist arguments")
+	}
+
+	log := GetLogger()
+
+	var targets []string
+	if !syncAll {
+		targets = selectTargets(args, viper.GetStringSlice("playlists"))
+		if len(targets) == 0 {
+			return fmt.Errorf("no playlists to sync (pass IDs/URLs as arguments, set `playlists` in config, or use --all)")
+		}
 	}
 
 	client, tok, err := auth.Client(ctx, clientID, port)
@@ -71,7 +84,21 @@ func runSync(ctx context.Context, args []string) error {
 	}
 	defer auth.PersistRefreshed(client, tok)
 
-	log := GetLogger()
+	if syncAll {
+		targets, err = spotifyfetch.ListMyPlaylists(ctx, client, syncIncludeFoll)
+		if err != nil {
+			return err
+		}
+		if len(targets) == 0 {
+			log.Warn("no playlists found for the current user")
+			return nil
+		}
+		scope := "owned"
+		if syncIncludeFoll {
+			scope = "owned + followed"
+		}
+		log.Infof("--all: syncing %d playlists (%s)", len(targets), scope)
+	}
 	now := time.Now()
 
 	var mu sync.Mutex // serializes per-file read/merge/write (files share a dir)
@@ -128,4 +155,6 @@ func init() {
 	rootCmd.AddCommand(syncCmd)
 	syncCmd.Flags().StringVar(&syncDir, "dir", "", "directory for playlist YAML files (default: config `dir`, else ./playlists)")
 	syncCmd.Flags().StringVar(&syncStrategy, "strategy", "archive", "sync strategy: archive or mirror")
+	syncCmd.Flags().BoolVar(&syncAll, "all", false, "sync all playlists you own (ignores args/config; excludes followed)")
+	syncCmd.Flags().BoolVar(&syncIncludeFoll, "include-followed", false, "with --all, also sync followed/algorithmic playlists")
 }
