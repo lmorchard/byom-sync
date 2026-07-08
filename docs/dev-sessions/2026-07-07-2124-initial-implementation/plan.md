@@ -253,10 +253,11 @@ func PersistRefreshed(client *spotify.Client, prev *oauth2.Token) {
 ```
 
 **Verification — automated:**
-- [ ] `make test`: token store save/load round-trip; `tokenPath` honors `XDG_CONFIG_HOME`; `LoadToken` returns `ErrNoToken` when absent
-- [ ] `make lint` passes
+- [x] `make test`: token store save/load round-trip; `tokenPath` honors `XDG_CONFIG_HOME`; `LoadToken` returns `ErrNoToken` when absent
+- [x] `make lint` passes
+- [x] `byom-sync auth` with no `client_id` fails gracefully with a clear message (verified)
 
-**Verification — manual:**
+**Verification — manual (batched with Phase 5, needs a real Spotify app):**
 - [ ] Register a Spotify app (redirect URI `http://127.0.0.1:8888/callback`), set `client_id` in config
 - [ ] `byom-sync auth` opens browser, completes, prints success; `token.json` written at `0o600`
 - [ ] Re-running a command after token expiry silently refreshes (no re-auth prompt)

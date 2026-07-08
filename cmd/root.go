@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/lmorchard/byom-sync/internal/config"
 	"github.com/sirupsen/logrus"
@@ -59,8 +60,13 @@ func initConfig() {
 		// Use config file from the flag
 		viper.SetConfigFile(cfgFile)
 	} else {
-		// Search for config in current directory
+		// Search for config in the current directory and XDG config dir
 		viper.AddConfigPath(".")
+		if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+			viper.AddConfigPath(filepath.Join(xdg, "byom-sync"))
+		} else if home, err := os.UserHomeDir(); err == nil {
+			viper.AddConfigPath(filepath.Join(home, ".config", "byom-sync"))
+		}
 		viper.SetConfigType("yaml")
 		viper.SetConfigName("byom-sync")
 	}
@@ -69,6 +75,9 @@ func initConfig() {
 	viper.SetDefault("verbose", false)
 	viper.SetDefault("debug", false)
 	viper.SetDefault("log_json", false)
+	viper.SetDefault("client_id", "")
+	viper.SetDefault("redirect_port", 8888)
+	viper.SetDefault("dir", "./playlists")
 
 	// Read in environment variables that match
 	viper.AutomaticEnv()
