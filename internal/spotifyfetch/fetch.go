@@ -53,9 +53,10 @@ func Fetch(ctx context.Context, c *spotify.Client, id spotify.ID) (playlist.Play
 	}
 
 	out := playlist.Playlist{
-		SpotifyID: string(id),
-		Title:     fp.Name,
-		Creator:   fp.Owner.DisplayName,
+		SpotifyID:   string(id),
+		Title:       fp.Name,
+		Creator:     fp.Owner.DisplayName,
+		Description: fp.Description,
 	}
 
 	page, err := c.GetPlaylistItems(ctx, id)
@@ -64,7 +65,7 @@ func Fetch(ctx context.Context, c *spotify.Client, id spotify.ID) (playlist.Play
 			if page.Items[i].Track.Track == nil {
 				continue // episode or unavailable in this market
 			}
-			out.Tracks = append(out.Tracks, convert(page.Items[i].Track.Track))
+			out.Tracks = append(out.Tracks, convert(page.Items[i]))
 		}
 		err = c.NextPage(ctx, page)
 	}
@@ -74,7 +75,8 @@ func Fetch(ctx context.Context, c *spotify.Client, id spotify.ID) (playlist.Play
 	return out, nil
 }
 
-func convert(ft *spotify.FullTrack) playlist.Track {
+func convert(item spotify.PlaylistItem) playlist.Track {
+	ft := item.Track.Track
 	return playlist.Track{
 		Title:  ft.Name,
 		Artist: joinArtists(ft.Artists),
@@ -82,7 +84,10 @@ func convert(ft *spotify.FullTrack) playlist.Track {
 		// FullTrack.ExternalIDs is a map[string]string in zmb3/spotify/v2 v2.4.3
 		// (it shadows the embedded SimpleTrack's typed field).
 		ISRC:       ft.ExternalIDs["isrc"],
+		SpotifyID:  string(ft.ID),
+		SpotifyURL: ft.ExternalURLs["spotify"],
 		DurationMS: int(ft.Duration),
+		AddedAt:    item.AddedAt,
 		SyncState:  playlist.SyncState{SpotifyPresent: true},
 	}
 }

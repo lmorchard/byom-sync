@@ -39,8 +39,15 @@ func TestConvert(t *testing.T) {
 	ft.Album = spotify.SimpleAlbum{Name: "The Album"}
 	ft.Duration = 240000
 	ft.ExternalIDs = map[string]string{"isrc": "USABC1234567"}
+	ft.ID = "abc123trackid"
+	ft.ExternalURLs = map[string]string{"spotify": "https://open.spotify.com/track/abc123trackid"}
 
-	got := convert(ft)
+	item := spotify.PlaylistItem{
+		AddedAt: "2025-01-15T12:00:00Z",
+		Track:   spotify.PlaylistItemTrack{Track: ft},
+	}
+
+	got := convert(item)
 
 	if got.Title != "My Song" {
 		t.Errorf("title: %q", got.Title)
@@ -54,8 +61,17 @@ func TestConvert(t *testing.T) {
 	if got.ISRC != "USABC1234567" {
 		t.Errorf("isrc: %q", got.ISRC)
 	}
+	if got.SpotifyID != "abc123trackid" {
+		t.Errorf("spotify_id: %q", got.SpotifyID)
+	}
+	if got.SpotifyURL != "https://open.spotify.com/track/abc123trackid" {
+		t.Errorf("spotify_url: %q", got.SpotifyURL)
+	}
 	if got.DurationMS != 240000 {
 		t.Errorf("duration: %d", got.DurationMS)
+	}
+	if got.AddedAt != "2025-01-15T12:00:00Z" {
+		t.Errorf("added_at: %q", got.AddedAt)
 	}
 	if !got.SyncState.SpotifyPresent {
 		t.Errorf("should be marked present")
