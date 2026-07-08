@@ -51,6 +51,27 @@ func TestSelectOwnedIDs(t *testing.T) {
 	}
 }
 
+func TestIsCatalogStub(t *testing.T) {
+	stub := &spotify.FullTrack{}
+	stub.Name = ""
+	stub.Artists = nil
+	if !isCatalogStub(stub) {
+		t.Error("empty title + no artists should be a stub")
+	}
+
+	titled := &spotify.FullTrack{}
+	titled.Name = "Something"
+	if isCatalogStub(titled) {
+		t.Error("a track with a title is not a stub")
+	}
+
+	arted := &spotify.FullTrack{}
+	arted.Artists = []spotify.SimpleArtist{{Name: "A"}}
+	if isCatalogStub(arted) {
+		t.Error("a track with artists is not a stub")
+	}
+}
+
 func TestConvert(t *testing.T) {
 	ft := &spotify.FullTrack{}
 	ft.Name = "My Song"

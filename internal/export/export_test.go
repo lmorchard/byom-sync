@@ -28,7 +28,7 @@ func samplePlaylist() playlist.Playlist {
 		Creator:     "Les",
 		DateCreated: time.Date(2026, 7, 7, 0, 0, 0, 0, time.UTC),
 		Tracks: []playlist.Track{
-			{Title: "Song One", Artist: "Artist A", Album: "Album X", ISRC: "GBA098000010", DurationMS: 354000, AddedAt: "2026-05-29T04:02:20Z", SyncState: playlist.SyncState{SpotifyPresent: true}},
+			{Title: "Song One", Artist: "Artist A", Album: "Album X", ISRC: "GBA098000010", SpotifyID: "track123", SpotifyURL: "https://open.spotify.com/track/track123", DurationMS: 354000, AddedAt: "2026-05-29T04:02:20Z", SyncState: playlist.SyncState{SpotifyPresent: true}},
 			{Title: "Song Two", Artist: "Artist B", Album: "Album Y", DurationMS: 200000, SyncState: playlist.SyncState{SpotifyPresent: false, DateOrphaned: "2026-01-01T00:00:00Z"}},
 		},
 	}
@@ -105,10 +105,20 @@ func TestJSPFExport(t *testing.T) {
 	if len(ids) != 1 || ids[0] != "urn:isrc:GBA098000010" {
 		t.Errorf("identifier wrong: %v", ids)
 	}
+	// spotify_url exposed as JSPF location
+	loc, ok := t0["location"].([]any)
+	if !ok || len(loc) != 1 || loc[0] != "https://open.spotify.com/track/track123" {
+		t.Errorf("location should carry spotify_url: %v", t0["location"])
+	}
+
 	// track with no ISRC omits identifier
 	t1 := tracks[1].(map[string]any)
 	if _, present := t1["identifier"]; present {
 		t.Errorf("identifier should be omitted when ISRC empty: %v", t1)
+	}
+	// track with no spotify_url omits location
+	if _, present := t1["location"]; present {
+		t.Errorf("location should be omitted when spotify_url empty: %v", t1)
 	}
 }
 
@@ -136,6 +146,14 @@ func TestMarkdownExport(t *testing.T) {
 	}
 	if !strings.Contains(s, "2026-05-29T04:02:20Z") {
 		t.Errorf("added_at value missing from table:\n%s", s)
+	}
+	// title linked to spotify_url when present
+	if !strings.Contains(s, "[Song One](https://open.spotify.com/track/track123)") {
+		t.Errorf("title should link to spotify_url:\n%s", s)
+	}
+	// track without a spotify_url renders a plain title
+	if !strings.Contains(s, "| Song Two |") {
+		t.Errorf("title without url should be plain text:\n%s", s)
 	}
 }
 

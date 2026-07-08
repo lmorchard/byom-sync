@@ -62,8 +62,12 @@ func Fetch(ctx context.Context, c *spotify.Client, id spotify.ID) (playlist.Play
 	page, err := c.GetPlaylistItems(ctx, id)
 	for err == nil {
 		for i := range page.Items {
-			if page.Items[i].Track.Track == nil {
+			ft := page.Items[i].Track.Track
+			if ft == nil {
 				continue // episode or unavailable in this market
+			}
+			if isCatalogStub(ft) {
+				continue // catalog-removed placeholder with no usable metadata
 			}
 			out.Tracks = append(out.Tracks, convert(page.Items[i]))
 		}
@@ -107,6 +111,14 @@ func selectOwnedIDs(playlists []spotify.SimplePlaylist, userID string, includeFo
 		}
 	}
 	return ids
+}
+
+// isCatalogStub reports whether a track is a metadata-less placeholder — Spotify
+// sometimes returns a non-nil track for a playlist slot whose underlying item has
+// been removed from the catalog, with an empty name and no artists. These carry
+// no useful curation data, so they're skipped rather than stored as noise.
+func isCatalogStub(ft *spotify.FullTrack) bool {
+	return ft.Name == "" && len(ft.Artists) == 0
 }
 
 func convert(item spotify.PlaylistItem) playlist.Track {

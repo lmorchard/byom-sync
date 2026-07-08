@@ -67,12 +67,21 @@ Synced a 8312-track playlist in ~46s — pagination (~84 pages) + WithRetry(true
 429 handling solid, no drops. 1.5M YAML. jspf/hugo emit all 8312; m3u8 emits
 8310 because it intentionally skips 2 empty-title tracks.
 
-### Future refinement (NOT this session): catalog-removed stub tracks
-Spotify returns some playlist slots as tracks with empty title AND empty artist
-(catalog-removed items, e.g. album "Deep Forest" with no title/artist). We store
-them faithfully, but they're noise: m3u8 skips them (can't form a file path),
-jspf/hugo include them. Consider filtering title+artist-empty tracks at fetch
-time, or marking them, in a future session. Discovered via the torture test.
+### Catalog-removed stub tracks — RESOLVED
+Spotify returns some playlist slots as tracks with empty title AND no artists
+(catalog-removed items). Now filtered at fetch time via isCatalogStub
+(internal/spotifyfetch/fetch.go). Discovered via the torture test.
+
+### Backlog closed (post-session polish PRs)
+- MIT license added.
+- Catalog stub tracks filtered at fetch (above).
+- Exporters surface spotify_url: JSPF `location`, Markdown title link. Markdown
+  also has the added_at column.
+- Token silent-refresh VERIFIED: ran a sync against a ~16h-expired token; it
+  refreshed (access token changed) and persisted the new token. Works.
+- `export hugo` renamed to `export markdown` (format isn't Hugo-specific).
+- CI fixed + golangci-lint pinned to v2.12.2 (local == CI); GitHub Actions
+  bumped to Node 24 versions. All via PRs (#1–#3) with green CI.
 
 ### Test artifacts left in ./playlists/ (gitignored)
 `today-s-top-hits.yaml`, `bleep-bloop-bop-synthpop.yaml` — from verification.

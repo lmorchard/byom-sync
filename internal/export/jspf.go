@@ -29,6 +29,7 @@ type jspfTrack struct {
 	Album      string   `json:"album,omitempty"`
 	Duration   int      `json:"duration,omitempty"`
 	Identifier []string `json:"identifier,omitempty"`
+	Location   []string `json:"location,omitempty"`
 }
 
 func (JSPFExporter) Export(p playlist.Playlist, outputPath string, _ map[string]string) error {
@@ -50,6 +51,9 @@ func (JSPFExporter) Export(p playlist.Playlist, outputPath string, _ map[string]
 		}
 		if t.ISRC != "" {
 			jt.Identifier = []string{"urn:isrc:" + t.ISRC}
+		}
+		if t.SpotifyURL != "" {
+			jt.Location = []string{t.SpotifyURL}
 		}
 		doc.Playlist.Track = append(doc.Playlist.Track, jt)
 	}

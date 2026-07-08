@@ -7,5 +7,5 @@ date: "{{ .Date }}"
 | Title | Artist | Album | Added |
 |-------|--------|-------|-------|
 {{ range .Tracks -}}
-| {{ .Title }} | {{ .Artist }} | {{ .Album }} | {{ .AddedAt }} |
+| {{ if .SpotifyURL }}[{{ .Title }}]({{ .SpotifyURL }}){{ else }}{{ .Title }}{{ end }} | {{ .Artist }} | {{ .Album }} | {{ .AddedAt }} |
 {{ end -}}
