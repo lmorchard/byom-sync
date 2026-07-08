@@ -325,12 +325,13 @@ if len(targets) == 0 { targets = viper.GetStringSlice("playlists") }
 - `DateCreated`: preserve the local file's value on re-sync; only stamp `time.Now().UTC()` for a brand-new playlist file.
 
 **Verification — automated:**
-- [ ] `make test`: `convert` maps name/artists(joined)/album/ISRC/duration correctly; nil track skipped
-- [ ] `make test`: `parseID` handles raw ID, `spotify:playlist:<id>`, and `https://open.spotify.com/playlist/<id>?si=...`
-- [ ] `make test`: sync target selection — positional args override config `playlists`; empty args use config
-- [ ] `make lint` passes
+- [x] `make test`: `convert` maps name/artists(joined)/album/ISRC/duration correctly; nil track skipped
+- [x] `make test`: `parseID` handles raw ID, `spotify:playlist:<id>`, and `https://open.spotify.com/playlist/<id>?si=...`
+- [x] `make test`: sync target selection — positional args override config `playlists`; empty args use config
+- [x] `make lint` passes
+- [x] `sync` error paths verified: bad strategy, no token (→ "run auth first"), no targets
 
-**Verification — manual:**
+**Verification — manual (needs a real Spotify app + account):**
 - [ ] `byom-sync sync <real-playlist-url> --dir ./playlists` creates `<slug>.yaml` with correct tracks
 - [ ] A playlist >100 tracks pulls ALL tracks (pagination works)
 - [ ] Re-sync after removing a track upstream: archive keeps it with `spotify_present=false` + `date_orphaned`; mirror drops it
