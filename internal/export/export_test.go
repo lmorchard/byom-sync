@@ -28,7 +28,7 @@ func samplePlaylist() playlist.Playlist {
 		Creator:     "Les",
 		DateCreated: time.Date(2026, 7, 7, 0, 0, 0, 0, time.UTC),
 		Tracks: []playlist.Track{
-			{Title: "Song One", Artist: "Artist A", Album: "Album X", ISRC: "GBA098000010", DurationMS: 354000, SyncState: playlist.SyncState{SpotifyPresent: true}},
+			{Title: "Song One", Artist: "Artist A", Album: "Album X", ISRC: "GBA098000010", DurationMS: 354000, AddedAt: "2026-05-29T04:02:20Z", SyncState: playlist.SyncState{SpotifyPresent: true}},
 			{Title: "Song Two", Artist: "Artist B", Album: "Album Y", DurationMS: 200000, SyncState: playlist.SyncState{SpotifyPresent: false, DateOrphaned: "2026-01-01T00:00:00Z"}},
 		},
 	}
@@ -131,8 +131,11 @@ func TestHugoExport(t *testing.T) {
 	if !strings.Contains(s, "Song One") || !strings.Contains(s, "Artist A") || !strings.Contains(s, "Album X") {
 		t.Errorf("track row missing:\n%s", s)
 	}
-	if !strings.Contains(s, "| Title | Artist | Album |") {
-		t.Errorf("table header missing:\n%s", s)
+	if !strings.Contains(s, "| Title | Artist | Album | Added |") {
+		t.Errorf("table header missing/incorrect:\n%s", s)
+	}
+	if !strings.Contains(s, "2026-05-29T04:02:20Z") {
+		t.Errorf("added_at value missing from table:\n%s", s)
 	}
 }
 

@@ -4,8 +4,8 @@ creator: "{{ .Creator }}"
 date: "{{ .Date }}"
 ---
 
-| Title | Artist | Album |
-|-------|--------|-------|
+| Title | Artist | Album | Added |
+|-------|--------|-------|-------|
 {{ range .Tracks -}}
-| {{ .Title }} | {{ .Artist }} | {{ .Album }} |
+| {{ .Title }} | {{ .Artist }} | {{ .Album }} | {{ .AddedAt }} |
 {{ end -}}
