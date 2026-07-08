@@ -194,4 +194,4 @@ make build      # build ./byom-sync
 
 ## License
 
-No license specified yet.
+MIT — see [LICENSE](LICENSE).
