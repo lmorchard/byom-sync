@@ -258,9 +258,11 @@ func PersistRefreshed(client *spotify.Client, prev *oauth2.Token) {
 - [x] `byom-sync auth` with no `client_id` fails gracefully with a clear message (verified)
 
 **Verification — manual (batched with Phase 5, needs a real Spotify app):**
-- [ ] Register a Spotify app (redirect URI `http://127.0.0.1:8888/callback`), set `client_id` in config
-- [ ] `byom-sync auth` opens browser, completes, prints success; `token.json` written at `0o600`
-- [ ] Re-running a command after token expiry silently refreshes (no re-auth prompt)
+- [x] Register a Spotify app (redirect URI `http://127.0.0.1:8888/callback`), set `client_id` in config
+- [x] `byom-sync auth` opens browser, completes, prints success; `token.json` written at `0o600` (verified perms)
+- [ ] Re-running a command after token expiry silently refreshes (no re-auth prompt) — not yet observed (token < 1h old; `sync` re-runs succeeded on the cached token)
+
+_Note: hit intermittent Spotify `redirect_uri: Not matching configuration` / `server_error` during setup — both were dashboard propagation lag + the dev-mode User Management allowlist, not code. Resolved by adding the account to User Management and waiting for propagation._
 
 ---
 
@@ -332,11 +334,11 @@ if len(targets) == 0 { targets = viper.GetStringSlice("playlists") }
 - [x] `sync` error paths verified: bad strategy, no token (→ "run auth first"), no targets
 
 **Verification — manual (needs a real Spotify app + account):**
-- [ ] `byom-sync sync <real-playlist-url> --dir ./playlists` creates `<slug>.yaml` with correct tracks
-- [ ] A playlist >100 tracks pulls ALL tracks (pagination works)
-- [ ] Re-sync after removing a track upstream: archive keeps it with `spotify_present=false` + `date_orphaned`; mirror drops it
-- [ ] Re-sync preserves original `date_created`
-- [ ] End-to-end: `sync` a playlist, then `export m3u8/jspf/hugo` the result
+- [x] `byom-sync sync <real-playlist-url> --dir ./playlists` creates `<slug>.yaml` with correct tracks (synced "Today's Top Hits", 50 tracks → `today-s-top-hits.yaml`, correct schema/ISRC/duration)
+- [x] A playlist >100 tracks pulls ALL tracks (pagination works) — synced a 153-track playlist; all pages pulled via NextPage, no drops/double-fetches (the one repeated ISRC is a genuine duplicate entry in the playlist)
+- [x] Re-sync after removing a track upstream: archive keeps it with `spotify_present=false` + `date_orphaned`; mirror drops it (verified with a synthetic local-only track)
+- [x] Re-sync preserves original `date_created`
+- [x] End-to-end: `sync` a playlist, then `export m3u8/jspf/hugo` the result (all three produced correct output on live data)
 
 ---
 

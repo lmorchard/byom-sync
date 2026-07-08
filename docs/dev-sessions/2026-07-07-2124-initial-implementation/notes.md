@@ -1,9 +1,10 @@
 # Notes — byom-sync initial implementation
 
-## Status: implementation complete, pending live Spotify verification
+## Status: implementation complete, live-verified against Spotify
 
-All 5 phases implemented, tested (`make test`/`make lint` green), and committed
-one-per-phase on branch `initial-implementation`.
+All 5 phases implemented, tested (`make test`/`make lint` green), committed
+one-per-phase on branch `initial-implementation`, and verified end-to-end
+against a real Spotify account (see "Live verification" below).
 
 ## What was built
 
@@ -40,17 +41,30 @@ one-per-phase on branch `initial-implementation`.
 - m3u8 uses `path` (not `filepath`) so media paths stay `/`-separated for the
   target server regardless of host OS.
 
-## Pending: manual verification (needs a real Spotify app + Premium account)
+## Live verification (done against a real Spotify account)
 
-1. Register a Spotify app at https://developer.spotify.com/dashboard; add redirect
-   URI `http://127.0.0.1:8888/callback`. Put `client_id` in `byom-sync.yaml`.
-2. `byom-sync auth` → browser consent → expect success + `token.json` at 0o600.
-3. `byom-sync sync <playlist-url> --dir ./playlists` → expect `<slug>.yaml`.
-4. Sync a playlist with >100 tracks → confirm ALL tracks captured (pagination).
-5. Remove a track upstream, re-sync: archive keeps it orphaned
-   (`spotify_present:false` + `date_orphaned`); `--strategy mirror` drops it.
-6. Re-sync preserves original `date_created`.
-7. `export m3u8|jspf|hugo` the synced files end-to-end.
+- ✅ `auth` PKCE flow → `token.json` written at `0o600`.
+- ✅ `sync` "Today's Top Hits" (50 tracks) → correct schema/ISRC/duration.
+- ✅ Re-sync idempotent; `date_created` preserved.
+- ✅ Archive orphaning (`spotify_present:false` + `date_orphaned` RFC3339) via a
+  synthetic local-only track; `--strategy mirror` drops it.
+- ✅ All three exporters correct on live data.
+- ✅ Pagination: synced a 153-track playlist, all pages pulled via NextPage, no
+  drops/double-fetches (one repeated ISRC was a genuine duplicate playlist entry).
+- ⏳ Token silent-refresh NOT observed (token < 1h old); low risk — oauth2
+  TokenSource handles it, cached-token re-runs already succeed.
+
+### Setup friction (Spotify-side, not code)
+Hit intermittent `redirect_uri: Not matching configuration` and `server_error`
+during auth setup. Root causes: (1) Spotify dashboard redirect-URI changes take a
+few minutes to propagate to the authorize endpoint; (2) dev-mode apps require the
+authorizing account in the **User Management** allowlist (missing user → generic
+`server_error` after consent). Fixed by adding the account + waiting for
+propagation. No byom-sync code change was needed.
+
+### Test artifacts left in ./playlists/ (gitignored)
+`today-s-top-hits.yaml`, `bleep-bloop-bop-synthpop.yaml` — from verification.
+`*.yaml` is gitignored so they won't be committed; delete if unwanted.
 
 ## Next
 

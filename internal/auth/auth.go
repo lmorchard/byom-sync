@@ -63,8 +63,12 @@ func RunInteractiveFlow(ctx context.Context, clientID string, port int) error {
 	mux.HandleFunc(callbackPath, func(w http.ResponseWriter, r *http.Request) {
 		once.Do(func() {
 			if e := r.URL.Query().Get("error"); e != "" {
-				http.Error(w, "authorization denied: "+e, http.StatusBadRequest)
-				resultCh <- result{err: fmt.Errorf("authorization denied: %s", e)}
+				msg := e
+				if desc := r.URL.Query().Get("error_description"); desc != "" {
+					msg = e + ": " + desc
+				}
+				http.Error(w, "authorization denied: "+msg, http.StatusBadRequest)
+				resultCh <- result{err: fmt.Errorf("authorization denied: %s", msg)}
 				return
 			}
 			if r.URL.Query().Get("state") != state {
