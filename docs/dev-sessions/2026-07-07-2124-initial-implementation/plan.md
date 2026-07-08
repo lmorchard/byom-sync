@@ -133,13 +133,13 @@ func Merge(local, remote Playlist, strat Strategy, now time.Time) Playlist {
 ```
 
 **Verification — automated:**
-- [ ] `make test` passes: archive adds new tracks, orphans missing local tracks (sets `spotify_present=false` + `date_orphaned`), preserves an already-set `date_orphaned`
-- [ ] `make test` passes: mirror discards local-only tracks, all `spotify_present=true`
-- [ ] `make test` passes: `Save` matches existing file by `spotify_id` (filename preserved even when title changed); collision appends id suffix; `Load` round-trips
-- [ ] `make lint` passes
+- [x] `make test` passes: archive adds new tracks, orphans missing local tracks (sets `spotify_present=false` + `date_orphaned`), preserves an already-set `date_orphaned`
+- [x] `make test` passes: mirror discards local-only tracks, all `spotify_present=true`
+- [x] `make test` passes: `Save` matches existing file by `spotify_id` (filename preserved even when title changed); collision appends id suffix; `Load` round-trips
+- [x] `make lint` passes
 
 **Verification — manual:**
-- [ ] Eyeball a saved YAML file — field order/readability matches the spec schema
+- [ ] Eyeball a saved YAML file — field order/readability matches the spec schema (deferred to Phase 3 manual step, where a file gets hand-authored/exported)
 
 ---
 
