@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"time"
 
@@ -32,11 +33,11 @@ write it back into the YAML. Only missing tracks are attempted, so runs are
 incremental.
 
 Resolvers, tried in order per track:
-  1. odesli (song.link) — maps the track's Spotify URL to a YouTube link.
-     Free, no YouTube quota; needs no key (set odesli_api_key for a higher rate
-     limit). This is the primary resolver.
+  1. yt-dlp — YouTube's own search via the yt-dlp binary ("ytsearch1:..."). Free,
+     no quota, no key. Requires yt-dlp on PATH (or set ytdlp_path). Primary.
   2. youtube-search — the YouTube Data API text search, used only as a fallback
-     and only when youtube_api_key is set. It spends the ~100 searches/day quota.
+     and only when youtube_api_key is set. It spends the ~100 searches/day quota
+     and mostly duplicates yt-dlp, so it's rarely needed.
 
 --limit caps tracks attempted per run; --delay paces requests under rate limits.
 Resolution stops early (persisting progress) on quota exhaustion or sustained
@@ -61,14 +62,21 @@ func runResolveYouTube(ctx context.Context) error {
 		return nil
 	}
 
-	// Odesli (free, from the track's Spotify URL) is the primary resolver; the
-	// YouTube Data API search is a fallback, added only when a key is configured
-	// (it spends the ~100/day search quota).
-	resolvers := []youtube.Resolver{youtube.OdesliResolver{APIKey: viper.GetString("odesli_api_key")}}
-	names := "odesli"
+	// yt-dlp (free, no quota, no key) is the primary resolver; the YouTube Data
+	// API search is an optional fallback, added only when a key is configured
+	// (it spends the ~100/day search quota, and mostly duplicates yt-dlp).
+	ytdlpBin := viper.GetString("ytdlp_path")
+	if ytdlpBin == "" {
+		ytdlpBin = "yt-dlp"
+	}
+	if _, err := exec.LookPath(ytdlpBin); err != nil {
+		return fmt.Errorf("%q not found in PATH — install yt-dlp (https://github.com/yt-dlp/yt-dlp) or set ytdlp_path", ytdlpBin)
+	}
+	resolvers := []youtube.Resolver{youtube.YtdlpResolver{Bin: ytdlpBin}}
+	names := "yt-dlp"
 	if apiKey := viper.GetString("youtube_api_key"); apiKey != "" {
 		resolvers = append(resolvers, youtube.SearchResolver{Searcher: youtube.HTTPSearcher{APIKey: apiKey}})
-		names = "odesli, youtube-search"
+		names = "yt-dlp, youtube-search"
 	}
 	chain := youtube.NewChain(resolvers...)
 	chain.OnDisable = func(name string, err error) {

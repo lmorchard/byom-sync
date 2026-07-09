@@ -79,7 +79,7 @@ func initConfig() {
 	viper.SetDefault("redirect_port", 8888)
 	viper.SetDefault("dir", "./playlists")
 	viper.SetDefault("youtube_api_key", "")
-	viper.SetDefault("odesli_api_key", "")
+	viper.SetDefault("ytdlp_path", "yt-dlp")
 
 	// Read in environment variables that match
 	viper.AutomaticEnv()
