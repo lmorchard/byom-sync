@@ -92,17 +92,17 @@ func runResolveYouTube(ctx context.Context) error {
 		log.Infof("resolving YouTube ids across %d file(s) under %s [%s] (delay %s)", len(paths), input, names, resolveDelay)
 	}
 
-	// report narrates each track's outcome. Errors go to WARN so they surface
-	// even without --verbose (e.g. a bad key failing every search); hits/misses
-	// are INFO (quiet by default, visible with --verbose).
+	// report narrates each track's outcome. Errors go to WARN so they always
+	// surface; per-track hits/misses are DEBUG (--verbose) since coarse progress
+	// (per-file counts + checkpoints) already shows by default.
 	report := func(e youtube.Event) {
 		switch {
 		case e.Err != nil:
 			log.Warnf("  error: %s - %s: %v", e.Artist, e.Title, e.Err)
 		case e.VideoID != "":
-			log.Infof("  resolved: %s - %s -> %s (via %s)", e.Artist, e.Title, e.VideoID, e.Source)
+			log.Debugf("  resolved: %s - %s -> %s (via %s)", e.Artist, e.Title, e.VideoID, e.Source)
 		default:
-			log.Infof("  no match: %s - %s", e.Artist, e.Title)
+			log.Debugf("  no match: %s - %s", e.Artist, e.Title)
 		}
 	}
 
