@@ -125,3 +125,22 @@ func TestFindFileByID(t *testing.T) {
 		t.Errorf("should not find MISSING")
 	}
 }
+
+func TestSaveFileRoundTripsYouTubeID(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "pl.yaml")
+	p := Playlist{
+		SpotifyID: "PID", Title: "T",
+		Tracks: []Track{{Title: "S", Artist: "A", YouTubeID: "vid123"}},
+	}
+	if err := SaveFile(path, p); err != nil {
+		t.Fatalf("SaveFile: %v", err)
+	}
+	got, err := LoadFile(path)
+	if err != nil {
+		t.Fatalf("LoadFile: %v", err)
+	}
+	if got.Tracks[0].YouTubeID != "vid123" {
+		t.Errorf("youtube_id did not round-trip: %q", got.Tracks[0].YouTubeID)
+	}
+}

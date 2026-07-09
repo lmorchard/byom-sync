@@ -63,6 +63,16 @@ func loadFile(path string) (Playlist, error) {
 	return p, nil
 }
 
+// SaveFile writes a single playlist to an exact path (used to update a hub file
+// in place, preserving its filename).
+func SaveFile(path string, p Playlist) error {
+	data, err := yaml.Marshal(p)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o644)
+}
+
 // FindFileByID returns the path of the YAML file in dir whose spotify_id matches
 // spotifyID. ok is false (with a nil error) when no file matches.
 func FindFileByID(dir, spotifyID string) (path string, ok bool, err error) {
