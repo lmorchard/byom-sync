@@ -44,7 +44,7 @@ func pl(ids ...string) *playlist.Playlist {
 func TestResolveOnlyFillsEmptyIDs(t *testing.T) {
 	p := pl("", "already", "")
 	f := &fakeResolver{results: []Result{hit("v1"), hit("v2")}}
-	n, stopped, err := Resolve(context.Background(), f, p, nil, 0, nil, nil)
+	n, stopped, err := Resolve(context.Background(), f, p, ResolveOptions{})
 	if err != nil || stopped != "" {
 		t.Fatalf("n=%d stopped=%q err=%v", n, stopped, err)
 	}
@@ -60,7 +60,7 @@ func TestResolveRespectsBudget(t *testing.T) {
 	p := pl("", "", "")
 	f := &fakeResolver{results: []Result{hit("v1"), hit("v2"), hit("v3")}}
 	budget := 1
-	n, _, _ := Resolve(context.Background(), f, p, &budget, 0, nil, nil)
+	n, _, _ := Resolve(context.Background(), f, p, ResolveOptions{Budget: &budget})
 	if n != 1 || f.calls != 1 {
 		t.Errorf("resolved=%d calls=%d, want 1/1", n, f.calls)
 	}
@@ -72,7 +72,7 @@ func TestResolveRespectsBudget(t *testing.T) {
 func TestResolveStopsOnQuota(t *testing.T) {
 	p := pl("", "", "")
 	f := &fakeResolver{results: []Result{hit("v1"), {}, {}}, errs: []error{nil, ErrQuotaExceeded, nil}}
-	n, stopped, err := Resolve(context.Background(), f, p, nil, 0, nil, nil)
+	n, stopped, err := Resolve(context.Background(), f, p, ResolveOptions{})
 	if err != nil {
 		t.Fatalf("err=%v", err)
 	}
@@ -87,7 +87,7 @@ func TestResolveStopsOnQuota(t *testing.T) {
 func TestResolveStopsOnRateLimit(t *testing.T) {
 	p := pl("", "", "")
 	f := &fakeResolver{results: []Result{hit("v1"), {}, {}}, errs: []error{nil, ErrRateLimited, nil}}
-	n, stopped, err := Resolve(context.Background(), f, p, nil, 0, nil, nil)
+	n, stopped, err := Resolve(context.Background(), f, p, ResolveOptions{})
 	if err != nil {
 		t.Fatalf("err=%v", err)
 	}
@@ -99,7 +99,7 @@ func TestResolveStopsOnRateLimit(t *testing.T) {
 func TestResolveSkipsErrorAndContinues(t *testing.T) {
 	p := pl("", "")
 	f := &fakeResolver{results: []Result{{}, hit("v2")}, errs: []error{errSome(), nil}}
-	n, stopped, err := Resolve(context.Background(), f, p, nil, 0, nil, nil)
+	n, stopped, err := Resolve(context.Background(), f, p, ResolveOptions{})
 	if err != nil || stopped != "" {
 		t.Fatalf("n=%d stopped=%q err=%v", n, stopped, err)
 	}
@@ -112,7 +112,7 @@ func TestResolveReportsEachOutcome(t *testing.T) {
 	p := pl("", "", "")
 	f := &fakeResolver{results: []Result{{VideoID: "v1", Source: "odesli"}, {}, {}}, errs: []error{nil, nil, errSome()}}
 	var events []Event
-	_, _, _ = Resolve(context.Background(), f, p, nil, 0, func(e Event) { events = append(events, e) }, nil)
+	_, _, _ = Resolve(context.Background(), f, p, ResolveOptions{Report: func(e Event) { events = append(events, e) }})
 
 	if len(events) != 3 {
 		t.Fatalf("want 3 events, got %d", len(events))
@@ -132,9 +132,11 @@ func TestResolveCallsOnResolvedPerResolution(t *testing.T) {
 	p := pl("", "already", "", "")
 	f := &fakeResolver{results: []Result{hit("v1"), {}, hit("v4")}} // 3 attempts: hit, miss, hit
 	saves := 0
-	n, _, err := Resolve(context.Background(), f, p, nil, 0, nil, func() error {
-		saves++
-		return nil
+	n, _, err := Resolve(context.Background(), f, p, ResolveOptions{
+		OnResolved: func() error {
+			saves++
+			return nil
+		},
 	})
 	if err != nil {
 		t.Fatalf("err=%v", err)
@@ -148,12 +150,97 @@ func TestResolveStopsWhenOnResolvedErrors(t *testing.T) {
 	p := pl("", "", "")
 	f := &fakeResolver{results: []Result{hit("v1"), hit("v2"), hit("v3")}}
 	boom := context.DeadlineExceeded
-	n, _, err := Resolve(context.Background(), f, p, nil, 0, nil, func() error { return boom })
+	n, _, err := Resolve(context.Background(), f, p, ResolveOptions{OnResolved: func() error { return boom }})
 	if !errors.Is(err, boom) {
 		t.Fatalf("want persist error surfaced, got %v", err)
 	}
 	if n != 1 || f.calls != 1 { // stops after the first resolution's failed save
 		t.Errorf("resolved=%d calls=%d, want 1/1", n, f.calls)
+	}
+}
+
+func TestReresolveReplacesNonEmbeddableId(t *testing.T) {
+	p := pl("old")
+	f := &fakeResolver{results: []Result{hit("new")}}
+	n, _, err := Resolve(context.Background(), f, p, ResolveOptions{
+		Reresolve: true,
+		Verify:    func(context.Context, string) (bool, error) { return false, nil }, // not embeddable
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Tracks[0].YouTubeID != "new" || n != 1 || f.calls != 1 {
+		t.Errorf("id=%q resolved=%d calls=%d, want new/1/1", p.Tracks[0].YouTubeID, n, f.calls)
+	}
+}
+
+func TestReresolveKeepsEmbeddableId(t *testing.T) {
+	p := pl("good")
+	f := &fakeResolver{results: []Result{hit("new")}}
+	n, _, err := Resolve(context.Background(), f, p, ResolveOptions{
+		Reresolve: true,
+		Verify:    func(context.Context, string) (bool, error) { return true, nil },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Tracks[0].YouTubeID != "good" || n != 0 || f.calls != 0 {
+		t.Errorf("id=%q resolved=%d calls=%d, want good/0/0 (kept, resolver untouched)", p.Tracks[0].YouTubeID, n, f.calls)
+	}
+}
+
+func TestReresolveVerifyErrorKeepsIdAndContinues(t *testing.T) {
+	p := pl("e1", "") // first has an id (verify errors), second is empty
+	f := &fakeResolver{results: []Result{hit("filled")}}
+	n, _, err := Resolve(context.Background(), f, p, ResolveOptions{
+		Reresolve: true,
+		Verify:    func(context.Context, string) (bool, error) { return false, errors.New("net") },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Tracks[0].YouTubeID != "e1" {
+		t.Errorf("track0 id=%q, want kept e1", p.Tracks[0].YouTubeID)
+	}
+	if p.Tracks[1].YouTubeID != "filled" || n != 1 {
+		t.Errorf("track1 id=%q resolved=%d, want filled/1", p.Tracks[1].YouTubeID, n)
+	}
+}
+
+func TestReresolveOffLeavesExistingIds(t *testing.T) {
+	p := pl("x")
+	f := &fakeResolver{results: []Result{hit("new")}}
+	n, _, _ := Resolve(context.Background(), f, p, ResolveOptions{}) // Reresolve false
+	if p.Tracks[0].YouTubeID != "x" || n != 0 || f.calls != 0 {
+		t.Errorf("id=%q resolved=%d calls=%d, want x/0/0", p.Tracks[0].YouTubeID, n, f.calls)
+	}
+}
+
+func TestReresolveEmitsKindsAndPersistsChanges(t *testing.T) {
+	// track0 stays (embeddable), track1 replaced, track2 removed (no alt), track3 filled.
+	p := pl("keep", "bad", "gone", "")
+	f := &fakeResolver{results: []Result{hit("new1"), {}, hit("new3")}} // resolve calls: track1, track2, track3
+	var kinds []EventKind
+	saves := 0
+	_, _, err := Resolve(context.Background(), f, p, ResolveOptions{
+		Reresolve:  true,
+		Verify:     func(_ context.Context, id string) (bool, error) { return id == "keep", nil },
+		Report:     func(e Event) { kinds = append(kinds, e.Kind) },
+		OnResolved: func() error { saves++; return nil },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []EventKind{KindKept, KindReplaced, KindRemoved, KindResolved}
+	if len(kinds) != 4 || kinds[0] != want[0] || kinds[1] != want[1] || kinds[2] != want[2] || kinds[3] != want[3] {
+		t.Errorf("kinds=%v, want %v", kinds, want)
+	}
+	if p.Tracks[0].YouTubeID != "keep" || p.Tracks[1].YouTubeID != "new1" ||
+		p.Tracks[2].YouTubeID != "" || p.Tracks[3].YouTubeID != "new3" {
+		t.Errorf("ids=%v", []string{p.Tracks[0].YouTubeID, p.Tracks[1].YouTubeID, p.Tracks[2].YouTubeID, p.Tracks[3].YouTubeID})
+	}
+	if saves != 3 { // replaced, removed, resolved each persist; kept does not
+		t.Errorf("saves=%d, want 3 (replace+remove+resolve persist)", saves)
 	}
 }
 
