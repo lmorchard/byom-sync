@@ -1,5 +1,17 @@
 # Notes: byom-sync YouTube resolution
 
+## Durability of the resolve run (Les)
+
+For a long "let it rip" run (his biggest playlist is 8000 tracks) that might die
+or be stopped mid-way:
+
+- **Incremental chunked save.** `Resolve` calls an `onResolved` callback after each
+  id is filled; the command persists every N resolutions (`--flush`, default 20)
+  plus a final flush. Bounds interruption loss to <N tracks without rewriting a
+  ~1MB file on every single track. Runs are resumable (re-run skips resolved).
+- **Atomic writes.** `SaveFile` now writes a temp file in the same dir, fsyncs,
+  and renames over the target — a crash mid-write can't truncate/corrupt the hub.
+
 ## Odesli retired -> yt-dlp (Les)
 
 Right after building the Odesli resolver, Odesli announced its public API is being
