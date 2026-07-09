@@ -26,24 +26,27 @@ var resolveCmd = &cobra.Command{
 
 var resolveYouTubeCmd = &cobra.Command{
 	Use:   "youtube",
-	Short: "Search YouTube for tracks missing a youtube_id and store it in the hub",
-	Long: `Search the YouTube Data API for each hub track that has no youtube_id yet
-and write the resolved video ID back into the YAML. Only missing tracks are
-searched, so runs are incremental; --limit caps searches per run, and resolution
-stops early (persisting progress) if the daily API quota is exhausted.
+	Short: "Resolve a YouTube video id for tracks missing one and store it in the hub",
+	Long: `Resolve a YouTube video ID for each hub track that has no youtube_id yet and
+write it back into the YAML. Only missing tracks are attempted, so runs are
+incremental.
 
-Requires youtube_api_key in config (or the YOUTUBE_API_KEY environment variable).`,
+Resolvers, tried in order per track:
+  1. odesli (song.link) — maps the track's Spotify URL to a YouTube link.
+     Free, no YouTube quota; needs no key (set odesli_api_key for a higher rate
+     limit). This is the primary resolver.
+  2. youtube-search — the YouTube Data API text search, used only as a fallback
+     and only when youtube_api_key is set. It spends the ~100 searches/day quota.
+
+--limit caps tracks attempted per run; --delay paces requests under rate limits.
+Resolution stops early (persisting progress) on quota exhaustion or sustained
+rate limiting.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runResolveYouTube(context.Background())
 	},
 }
 
 func runResolveYouTube(ctx context.Context) error {
-	apiKey := viper.GetString("youtube_api_key")
-	if apiKey == "" {
-		return fmt.Errorf("youtube_api_key is not set (config or YOUTUBE_API_KEY env)")
-	}
-
 	input := resolveInput
 	if input == "" {
 		input = viper.GetString("dir")
@@ -58,24 +61,37 @@ func runResolveYouTube(ctx context.Context) error {
 		return nil
 	}
 
-	searcher := youtube.HTTPSearcher{APIKey: apiKey}
+	// Odesli (free, from the track's Spotify URL) is the primary resolver; the
+	// YouTube Data API search is a fallback, added only when a key is configured
+	// (it spends the ~100/day search quota).
+	resolvers := []youtube.Resolver{youtube.OdesliResolver{APIKey: viper.GetString("odesli_api_key")}}
+	names := "odesli"
+	if apiKey := viper.GetString("youtube_api_key"); apiKey != "" {
+		resolvers = append(resolvers, youtube.SearchResolver{Searcher: youtube.HTTPSearcher{APIKey: apiKey}})
+		names = "odesli, youtube-search"
+	}
+	chain := youtube.NewChain(resolvers...)
+	chain.OnDisable = func(name string, err error) {
+		log.Warnf("resolver %q exhausted (%v) — continuing without it", name, err)
+	}
+
 	var budget *int
 	if resolveLimit > 0 {
 		budget = &resolveLimit
-		log.Infof("resolving YouTube ids across %d file(s) under %s (limit %d searches)", len(paths), input, resolveLimit)
+		log.Infof("resolving YouTube ids across %d file(s) under %s [%s] (limit %d, delay %s)", len(paths), input, names, resolveLimit, resolveDelay)
 	} else {
-		log.Infof("resolving YouTube ids across %d file(s) under %s", len(paths), input)
+		log.Infof("resolving YouTube ids across %d file(s) under %s [%s] (delay %s)", len(paths), input, names, resolveDelay)
 	}
 
-	// report narrates each search outcome. Errors go to WARN so they surface
+	// report narrates each track's outcome. Errors go to WARN so they surface
 	// even without --verbose (e.g. a bad key failing every search); hits/misses
 	// are INFO (quiet by default, visible with --verbose).
 	report := func(e youtube.Event) {
 		switch {
 		case e.Err != nil:
-			log.Warnf("  search error: %s - %s: %v", e.Artist, e.Title, e.Err)
+			log.Warnf("  error: %s - %s: %v", e.Artist, e.Title, e.Err)
 		case e.VideoID != "":
-			log.Infof("  resolved: %s - %s -> %s", e.Artist, e.Title, e.VideoID)
+			log.Infof("  resolved: %s - %s -> %s (via %s)", e.Artist, e.Title, e.VideoID, e.Source)
 		default:
 			log.Infof("  no match: %s - %s", e.Artist, e.Title)
 		}
@@ -96,7 +112,7 @@ func runResolveYouTube(ctx context.Context) error {
 		}
 		log.Infof("%s: %d of %d tracks need a YouTube id", base, missing, len(p.Tracks))
 
-		n, stop, err := youtube.Resolve(ctx, searcher, &p, budget, resolveDelay, report)
+		n, stop, err := youtube.Resolve(ctx, chain, &p, budget, resolveDelay, report)
 		if err != nil {
 			return fmt.Errorf("resolve %s: %w", path, err)
 		}

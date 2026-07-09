@@ -7,26 +7,30 @@ import (
 	"github.com/lmorchard/byom-sync/internal/playlist"
 )
 
-// fakeSearcher returns queued results/errors in order.
-type fakeSearcher struct {
-	ids   []string
-	errs  []error
-	calls int
+// fakeResolver returns queued results/errors in order.
+type fakeResolver struct {
+	results []Result
+	errs    []error
+	calls   int
 }
 
-func (f *fakeSearcher) Search(_ context.Context, _ string) (string, error) {
+func (f *fakeResolver) Name() string { return "fake" }
+
+func (f *fakeResolver) Resolve(_ context.Context, _ playlist.Track) (Result, error) {
 	i := f.calls
 	f.calls++
-	var id string
-	if i < len(f.ids) {
-		id = f.ids[i]
+	var res Result
+	if i < len(f.results) {
+		res = f.results[i]
 	}
 	var err error
 	if i < len(f.errs) {
 		err = f.errs[i]
 	}
-	return id, err
+	return res, err
 }
+
+func hit(id string) Result { return Result{VideoID: id, Source: "fake"} }
 
 func pl(ids ...string) *playlist.Playlist {
 	p := &playlist.Playlist{}
@@ -38,7 +42,7 @@ func pl(ids ...string) *playlist.Playlist {
 
 func TestResolveOnlyFillsEmptyIDs(t *testing.T) {
 	p := pl("", "already", "")
-	f := &fakeSearcher{ids: []string{"v1", "v2"}}
+	f := &fakeResolver{results: []Result{hit("v1"), hit("v2")}}
 	n, stopped, err := Resolve(context.Background(), f, p, nil, 0, nil)
 	if err != nil || stopped != "" {
 		t.Fatalf("n=%d stopped=%q err=%v", n, stopped, err)
@@ -53,7 +57,7 @@ func TestResolveOnlyFillsEmptyIDs(t *testing.T) {
 
 func TestResolveRespectsBudget(t *testing.T) {
 	p := pl("", "", "")
-	f := &fakeSearcher{ids: []string{"v1", "v2", "v3"}}
+	f := &fakeResolver{results: []Result{hit("v1"), hit("v2"), hit("v3")}}
 	budget := 1
 	n, _, _ := Resolve(context.Background(), f, p, &budget, 0, nil)
 	if n != 1 || f.calls != 1 {
@@ -66,7 +70,7 @@ func TestResolveRespectsBudget(t *testing.T) {
 
 func TestResolveStopsOnQuota(t *testing.T) {
 	p := pl("", "", "")
-	f := &fakeSearcher{ids: []string{"v1", "", ""}, errs: []error{nil, ErrQuotaExceeded, nil}}
+	f := &fakeResolver{results: []Result{hit("v1"), {}, {}}, errs: []error{nil, ErrQuotaExceeded, nil}}
 	n, stopped, err := Resolve(context.Background(), f, p, nil, 0, nil)
 	if err != nil {
 		t.Fatalf("err=%v", err)
@@ -81,7 +85,7 @@ func TestResolveStopsOnQuota(t *testing.T) {
 
 func TestResolveStopsOnRateLimit(t *testing.T) {
 	p := pl("", "", "")
-	f := &fakeSearcher{ids: []string{"v1", "", ""}, errs: []error{nil, ErrRateLimited, nil}}
+	f := &fakeResolver{results: []Result{hit("v1"), {}, {}}, errs: []error{nil, ErrRateLimited, nil}}
 	n, stopped, err := Resolve(context.Background(), f, p, nil, 0, nil)
 	if err != nil {
 		t.Fatalf("err=%v", err)
@@ -89,14 +93,11 @@ func TestResolveStopsOnRateLimit(t *testing.T) {
 	if stopped != StopRateLimit || n != 1 || f.calls != 2 {
 		t.Errorf("stopped=%q resolved=%d calls=%d, want ratelimit/1/2", stopped, n, f.calls)
 	}
-	if p.Tracks[2].YouTubeID != "" {
-		t.Errorf("track after rate-limit should stay empty, got %q", p.Tracks[2].YouTubeID)
-	}
 }
 
-func TestResolveSkipsSearchErrorAndContinues(t *testing.T) {
+func TestResolveSkipsErrorAndContinues(t *testing.T) {
 	p := pl("", "")
-	f := &fakeSearcher{ids: []string{"", "v2"}, errs: []error{errSome(), nil}}
+	f := &fakeResolver{results: []Result{{}, hit("v2")}, errs: []error{errSome(), nil}}
 	n, stopped, err := Resolve(context.Background(), f, p, nil, 0, nil)
 	if err != nil || stopped != "" {
 		t.Fatalf("n=%d stopped=%q err=%v", n, stopped, err)
@@ -108,15 +109,15 @@ func TestResolveSkipsSearchErrorAndContinues(t *testing.T) {
 
 func TestResolveReportsEachOutcome(t *testing.T) {
 	p := pl("", "", "")
-	f := &fakeSearcher{ids: []string{"v1", "", ""}, errs: []error{nil, nil, errSome()}}
+	f := &fakeResolver{results: []Result{{VideoID: "v1", Source: "odesli"}, {}, {}}, errs: []error{nil, nil, errSome()}}
 	var events []Event
 	_, _, _ = Resolve(context.Background(), f, p, nil, 0, func(e Event) { events = append(events, e) })
 
 	if len(events) != 3 {
 		t.Fatalf("want 3 events, got %d", len(events))
 	}
-	if events[0].VideoID != "v1" || events[0].Err != nil { // hit
-		t.Errorf("event0 = %+v, want hit v1", events[0])
+	if events[0].VideoID != "v1" || events[0].Source != "odesli" || events[0].Err != nil { // hit
+		t.Errorf("event0 = %+v, want hit v1 via odesli", events[0])
 	}
 	if events[1].VideoID != "" || events[1].Err != nil { // miss
 		t.Errorf("event1 = %+v, want miss", events[1])

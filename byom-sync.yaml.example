@@ -12,8 +12,14 @@ redirect_port: 8888
 # Directory where per-playlist YAML files are stored / synced.
 dir: "./playlists"
 
-# YouTube Data API key for `byom-sync resolve youtube` (or set YOUTUBE_API_KEY).
-# Leave empty to disable YouTube resolution.
+# `byom-sync resolve youtube` resolves a YouTube video id per track.
+# Primary resolver is Odesli (song.link), which maps the track's Spotify URL to a
+# YouTube link for free — no key needed. Set odesli_api_key only for a higher
+# song.link rate limit.
+odesli_api_key: ""
+# Optional fallback: the YouTube Data API text search (spends ~100 searches/day
+# quota), used only for tracks Odesli can't map, and only when this key is set.
+# Or set YOUTUBE_API_KEY.
 youtube_api_key: ""
 
 # Playlists to sync when `byom-sync sync` is run with no positional arguments.
