@@ -12,6 +12,15 @@ redirect_port: 8888
 # Directory where per-playlist YAML files are stored / synced.
 dir: "./playlists"
 
+# `byom-sync resolve youtube` resolves a YouTube video id per track.
+# Primary resolver is yt-dlp (YouTube's own search), which needs no key and no
+# quota. Requires the yt-dlp binary on PATH; override its location here if needed.
+ytdlp_path: "yt-dlp"
+# Optional fallback: the YouTube Data API text search (spends ~100 searches/day
+# quota), used only when this key is set. It mostly duplicates yt-dlp, so it's
+# rarely needed. Or set YOUTUBE_API_KEY.
+youtube_api_key: ""
+
 # Playlists to sync when `byom-sync sync` is run with no positional arguments.
 # Accepts raw IDs, spotify:playlist:<id> URIs, or open.spotify.com URLs.
 playlists:

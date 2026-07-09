@@ -78,6 +78,8 @@ func initConfig() {
 	viper.SetDefault("client_id", "")
 	viper.SetDefault("redirect_port", 8888)
 	viper.SetDefault("dir", "./playlists")
+	viper.SetDefault("youtube_api_key", "")
+	viper.SetDefault("ytdlp_path", "yt-dlp")
 
 	// Read in environment variables that match
 	viper.AutomaticEnv()
@@ -102,12 +104,15 @@ func setupLogging() {
 		})
 	}
 
-	if viper.GetBool("debug") {
+	// Default shows coarse progress (INFO); --verbose adds per-item detail
+	// (DEBUG); --debug is the firehose (TRACE). Warnings/errors always show.
+	switch {
+	case viper.GetBool("debug"):
+		log.SetLevel(logrus.TraceLevel)
+	case viper.GetBool("verbose"):
 		log.SetLevel(logrus.DebugLevel)
-	} else if viper.GetBool("verbose") {
+	default:
 		log.SetLevel(logrus.InfoLevel)
-	} else {
-		log.SetLevel(logrus.WarnLevel)
 	}
 }
 

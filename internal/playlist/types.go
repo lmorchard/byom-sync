@@ -31,6 +31,7 @@ type Track struct {
 	SpotifyID  string    `yaml:"spotify_id,omitempty"`
 	SpotifyURL string    `yaml:"spotify_url,omitempty"`
 	DurationMS int       `yaml:"duration_ms,omitempty"`
+	YouTubeID  string    `yaml:"youtube_id,omitempty"`
 	AddedAt    string    `yaml:"added_at,omitempty"`
 	SyncState  SyncState `yaml:"sync_state"`
 }

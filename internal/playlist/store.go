@@ -63,6 +63,42 @@ func loadFile(path string) (Playlist, error) {
 	return p, nil
 }
 
+// SaveFile writes a single playlist to an exact path (used to update a hub file
+// in place, preserving its filename). The write is atomic: it goes to a temp
+// file in the same directory, is flushed, then renamed over the target — so a
+// crash mid-write can never leave the original truncated or corrupt (important
+// for large hub files written repeatedly during a long resolve run).
+func SaveFile(path string, p Playlist) error {
+	data, err := yaml.Marshal(p)
+	if err != nil {
+		return err
+	}
+
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	// Clean up the temp file on any failure before the rename (no-op after it).
+	defer func() { _ = os.Remove(tmpName) }()
+
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil { // flush to disk before the rename
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmpName, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, path)
+}
+
 // FindFileByID returns the path of the YAML file in dir whose spotify_id matches
 // spotifyID. ok is false (with a nil error) when no file matches.
 func FindFileByID(dir, spotifyID string) (path string, ok bool, err error) {

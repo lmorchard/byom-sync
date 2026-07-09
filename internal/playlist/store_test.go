@@ -125,3 +125,56 @@ func TestFindFileByID(t *testing.T) {
 		t.Errorf("should not find MISSING")
 	}
 }
+
+func TestSaveFileRoundTripsYouTubeID(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "pl.yaml")
+	p := Playlist{
+		SpotifyID: "PID", Title: "T",
+		Tracks: []Track{{Title: "S", Artist: "A", YouTubeID: "vid123"}},
+	}
+	if err := SaveFile(path, p); err != nil {
+		t.Fatalf("SaveFile: %v", err)
+	}
+	got, err := LoadFile(path)
+	if err != nil {
+		t.Fatalf("LoadFile: %v", err)
+	}
+	if got.Tracks[0].YouTubeID != "vid123" {
+		t.Errorf("youtube_id did not round-trip: %q", got.Tracks[0].YouTubeID)
+	}
+}
+
+func TestSaveFileOverwritesAtomicallyLeavingNoTemp(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "pl.yaml")
+	p := Playlist{SpotifyID: "PID", Title: "T", Tracks: []Track{{Title: "S", Artist: "A"}}}
+	if err := SaveFile(path, p); err != nil {
+		t.Fatalf("first save: %v", err)
+	}
+	p.Tracks[0].YouTubeID = "vid1"
+	if err := SaveFile(path, p); err != nil {
+		t.Fatalf("overwrite: %v", err)
+	}
+
+	got, err := LoadFile(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if got.Tracks[0].YouTubeID != "vid1" {
+		t.Errorf("overwrite lost: %q", got.Tracks[0].YouTubeID)
+	}
+
+	// No temp files left behind — only the target should remain.
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "pl.yaml" {
+		var names []string
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		t.Errorf("expected only pl.yaml, got %v", names)
+	}
+}
