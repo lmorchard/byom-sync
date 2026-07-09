@@ -1,5 +1,21 @@
 # Notes: byom-sync YouTube resolution
 
+## Odesli retired -> yt-dlp (Les)
+
+Right after building the Odesli resolver, Odesli announced its public API is being
+retired: stricter per-IP 429s now, `410 Gone` after 2026-07-31, no new keys. So
+it's not a durable primary. Swapped it for a **yt-dlp** resolver: shells out to
+`yt-dlp --flat-playlist --print id "ytsearch1:<artist> <title>"` — YouTube's own
+search, free, no quota, no key. Caveats: depends on the yt-dlp binary (pre-flight
+PATH check; `ytdlp_path` override) and is scraping-based (can break when YouTube
+changes). The command runner is injectable, so it's unit-tested without yt-dlp.
+The chain architecture paid off — this was a localized resolver swap.
+
+- Primary: yt-dlp. Fallback: youtube-search (key-gated, mostly redundant now).
+- **Verified end-to-end locally**: `Kavinsky - Nightcall -> MV_3Dpw-BRY`, written
+  to the hub. (yt-dlp 2026.03.17.)
+- Odesli resolver + tests removed.
+
 ## Resolver chain (Les, after blowing the 100/day quota)
 
 Live testing hit the fundamental wall: YouTube Data API `search.list` is ~100
