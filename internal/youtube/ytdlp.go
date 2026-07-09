@@ -55,18 +55,20 @@ func (y YtdlpResolver) Resolve(ctx context.Context, t playlist.Track) (Result, e
 	if err != nil {
 		return Result{}, fmt.Errorf("yt-dlp: %w", err)
 	}
-	// Take the first candidate that is embeddable. A verify error is propagated
-	// (transient) rather than silently falling to a worse match.
+	// Take the first candidate that is embeddable. A candidate we can't verify
+	// (age-gated "sign in to confirm your age", removed/private, or a transient
+	// blip) is skipped — it wouldn't embed in a public player anyway — so we try
+	// the next result instead of failing the whole track.
 	for _, id := range nonEmptyLines(out) {
 		embeddable, err := y.isEmbeddable(ctx, id)
 		if err != nil {
-			return Result{}, err
+			continue
 		}
 		if embeddable {
 			return Result{VideoID: id, Source: "yt-dlp"}, nil
 		}
 	}
-	return Result{}, nil // no embeddable candidate — leave unresolved
+	return Result{}, nil // no usable candidate — leave unresolved
 }
 
 // IsEmbeddable reports whether a video allows embedded playback (yt-dlp's
