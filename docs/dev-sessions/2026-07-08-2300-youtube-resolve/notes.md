@@ -1,5 +1,32 @@
 # Notes: byom-sync YouTube resolution
 
+## Resolver chain (Les, after blowing the 100/day quota)
+
+Live testing hit the fundamental wall: YouTube Data API `search.list` is ~100
+units against ~10k/day = ~100 searches/day, and a real library blows past it fast.
+
+Key realization: we already store each track's **Spotify URL**, so we don't need
+to *search* — we can *translate* a known track to its YouTube equivalent. Added a
+resolver chain:
+
+- **OdesliResolver (primary):** song.link API maps the Spotify URL → a YouTube
+  link. Free, no YouTube quota, no key (optional `odesli_api_key` raises the rate
+  limit). Rate-limited ~10/min, but no daily cap — so a real trickle that can
+  actually finish a library, and verifiable immediately.
+- **SearchResolver (fallback):** the YouTube Data API search, added to the chain
+  only when `youtube_api_key` is set (spends the scarce quota).
+
+**Stateful `Chain`:** a stop signal (quota/rate-limit) from a resolver *disables
+that resolver for the rest of the run* and the chain continues with the others —
+so an exhausted YouTube fallback never halts the progress Odesli can still make.
+The run stops only when every resolver is exhausted. This was a real flaw caught
+in testing: with the YouTube quota already blown, the first Odesli-miss falling
+through to the fallback would otherwise halt the whole run. Narration names the
+winning resolver and logs disables.
+
+Status: **still a draft PR** — Les needs to watch it resolve real tracks (via
+Odesli) before merging. No live external calls in tests (httptest + fakes).
+
 ## Live-testing follow-ups (Les, after first manual runs)
 
 Three fixes came out of Les running it against his real key:
