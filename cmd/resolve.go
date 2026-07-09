@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/lmorchard/byom-sync/internal/playlist"
 	"github.com/lmorchard/byom-sync/internal/youtube"
@@ -15,6 +16,7 @@ import (
 var (
 	resolveInput string
 	resolveLimit int
+	resolveDelay time.Duration
 )
 
 var resolveCmd = &cobra.Command{
@@ -94,7 +96,7 @@ func runResolveYouTube(ctx context.Context) error {
 		}
 		log.Infof("%s: %d of %d tracks need a YouTube id", base, missing, len(p.Tracks))
 
-		n, quota, err := youtube.Resolve(ctx, searcher, &p, budget, report)
+		n, stop, err := youtube.Resolve(ctx, searcher, &p, budget, resolveDelay, report)
 		if err != nil {
 			return fmt.Errorf("resolve %s: %w", path, err)
 		}
@@ -107,9 +109,14 @@ func runResolveYouTube(ctx context.Context) error {
 			log.Infof("%s: resolved 0 (nothing to save)", base)
 		}
 		total += n
-		if quota {
-			log.Warnf("YouTube daily quota exceeded — stopping (progress saved)")
+		if stop == youtube.StopQuota {
+			log.Warnf("YouTube daily quota exceeded — stopping (progress saved). Re-run tomorrow to continue.")
 			stopped = "quota"
+			break
+		}
+		if stop == youtube.StopRateLimit {
+			log.Warnf("YouTube rate limit hit repeatedly — stopping (progress saved). Retry later or raise --delay.")
+			stopped = "ratelimit"
 			break
 		}
 		if budget != nil && *budget <= 0 {
@@ -154,4 +161,5 @@ func init() {
 	resolveCmd.AddCommand(resolveYouTubeCmd)
 	resolveYouTubeCmd.Flags().StringVar(&resolveInput, "input", "", "hub YAML file or directory (default: config dir)")
 	resolveYouTubeCmd.Flags().IntVar(&resolveLimit, "limit", 0, "max searches this run (0 = unlimited; quota is the backstop)")
+	resolveYouTubeCmd.Flags().DurationVar(&resolveDelay, "delay", 500*time.Millisecond, "pause between searches to stay under the API rate limit")
 }

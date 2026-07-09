@@ -39,9 +39,9 @@ func pl(ids ...string) *playlist.Playlist {
 func TestResolveOnlyFillsEmptyIDs(t *testing.T) {
 	p := pl("", "already", "")
 	f := &fakeSearcher{ids: []string{"v1", "v2"}}
-	n, quota, err := Resolve(context.Background(), f, p, nil, nil)
-	if err != nil || quota {
-		t.Fatalf("n=%d quota=%v err=%v", n, quota, err)
+	n, stopped, err := Resolve(context.Background(), f, p, nil, 0, nil)
+	if err != nil || stopped != "" {
+		t.Fatalf("n=%d stopped=%q err=%v", n, stopped, err)
 	}
 	if n != 2 || f.calls != 2 {
 		t.Errorf("resolved=%d calls=%d, want 2/2", n, f.calls)
@@ -55,7 +55,7 @@ func TestResolveRespectsBudget(t *testing.T) {
 	p := pl("", "", "")
 	f := &fakeSearcher{ids: []string{"v1", "v2", "v3"}}
 	budget := 1
-	n, _, _ := Resolve(context.Background(), f, p, &budget, nil)
+	n, _, _ := Resolve(context.Background(), f, p, &budget, 0, nil)
 	if n != 1 || f.calls != 1 {
 		t.Errorf("resolved=%d calls=%d, want 1/1", n, f.calls)
 	}
@@ -67,24 +67,39 @@ func TestResolveRespectsBudget(t *testing.T) {
 func TestResolveStopsOnQuota(t *testing.T) {
 	p := pl("", "", "")
 	f := &fakeSearcher{ids: []string{"v1", "", ""}, errs: []error{nil, ErrQuotaExceeded, nil}}
-	n, quota, err := Resolve(context.Background(), f, p, nil, nil)
+	n, stopped, err := Resolve(context.Background(), f, p, nil, 0, nil)
 	if err != nil {
 		t.Fatalf("err=%v", err)
 	}
-	if !quota || n != 1 || f.calls != 2 {
-		t.Errorf("quota=%v resolved=%d calls=%d, want true/1/2", quota, n, f.calls)
+	if stopped != StopQuota || n != 1 || f.calls != 2 {
+		t.Errorf("stopped=%q resolved=%d calls=%d, want quota/1/2", stopped, n, f.calls)
 	}
 	if p.Tracks[2].YouTubeID != "" {
 		t.Errorf("track after quota should stay empty, got %q", p.Tracks[2].YouTubeID)
 	}
 }
 
+func TestResolveStopsOnRateLimit(t *testing.T) {
+	p := pl("", "", "")
+	f := &fakeSearcher{ids: []string{"v1", "", ""}, errs: []error{nil, ErrRateLimited, nil}}
+	n, stopped, err := Resolve(context.Background(), f, p, nil, 0, nil)
+	if err != nil {
+		t.Fatalf("err=%v", err)
+	}
+	if stopped != StopRateLimit || n != 1 || f.calls != 2 {
+		t.Errorf("stopped=%q resolved=%d calls=%d, want ratelimit/1/2", stopped, n, f.calls)
+	}
+	if p.Tracks[2].YouTubeID != "" {
+		t.Errorf("track after rate-limit should stay empty, got %q", p.Tracks[2].YouTubeID)
+	}
+}
+
 func TestResolveSkipsSearchErrorAndContinues(t *testing.T) {
 	p := pl("", "")
 	f := &fakeSearcher{ids: []string{"", "v2"}, errs: []error{errSome(), nil}}
-	n, quota, err := Resolve(context.Background(), f, p, nil, nil)
-	if err != nil || quota {
-		t.Fatalf("n=%d quota=%v err=%v", n, quota, err)
+	n, stopped, err := Resolve(context.Background(), f, p, nil, 0, nil)
+	if err != nil || stopped != "" {
+		t.Fatalf("n=%d stopped=%q err=%v", n, stopped, err)
 	}
 	if n != 1 || p.Tracks[0].YouTubeID != "" || p.Tracks[1].YouTubeID != "v2" {
 		t.Errorf("resolved=%d ids=%q", n, []string{p.Tracks[0].YouTubeID, p.Tracks[1].YouTubeID})
@@ -95,7 +110,7 @@ func TestResolveReportsEachOutcome(t *testing.T) {
 	p := pl("", "", "")
 	f := &fakeSearcher{ids: []string{"v1", "", ""}, errs: []error{nil, nil, errSome()}}
 	var events []Event
-	_, _, _ = Resolve(context.Background(), f, p, nil, func(e Event) { events = append(events, e) })
+	_, _, _ = Resolve(context.Background(), f, p, nil, 0, func(e Event) { events = append(events, e) })
 
 	if len(events) != 3 {
 		t.Fatalf("want 3 events, got %d", len(events))
