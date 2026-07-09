@@ -29,11 +29,13 @@ const (
 // mutating the tracks in place. budget (if non-nil) caps the number of tracks
 // attempted this call; pace (if > 0) waits between attempts to stay under API
 // rate limits. report (if non-nil) is called once per track attempted, for
-// narration. It stops early — returning a non-empty stopped reason — on quota
-// exhaustion or sustained rate limiting, leaving already-resolved IDs in place
-// for the caller to persist. A per-track error is reported and skipped (that
-// track keeps its empty ID) and does not abort the run.
-func Resolve(ctx context.Context, r Resolver, p *playlist.Playlist, budget *int, pace time.Duration, report func(Event)) (resolved int, stopped string, err error) {
+// narration. onResolved (if non-nil) is called immediately after each track's ID
+// is filled in, so the caller can persist incrementally for granular resume; if
+// it returns an error, Resolve stops and returns it. It also stops early —
+// returning a non-empty stopped reason — on quota exhaustion or sustained rate
+// limiting. A per-track resolution error is reported and skipped (that track
+// keeps its empty ID) and does not abort the run.
+func Resolve(ctx context.Context, r Resolver, p *playlist.Playlist, budget *int, pace time.Duration, report func(Event), onResolved func() error) (resolved int, stopped string, err error) {
 	attempted := 0
 	for i := range p.Tracks {
 		t := &p.Tracks[i]
@@ -70,6 +72,11 @@ func Resolve(ctx context.Context, r Resolver, p *playlist.Playlist, budget *int,
 		if res.VideoID != "" {
 			t.YouTubeID = res.VideoID
 			resolved++
+			if onResolved != nil {
+				if err := onResolved(); err != nil {
+					return resolved, "", err
+				}
+			}
 		}
 	}
 	return resolved, "", nil

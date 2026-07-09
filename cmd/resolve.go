@@ -18,6 +18,7 @@ var (
 	resolveInput string
 	resolveLimit int
 	resolveDelay time.Duration
+	resolveFlush int
 )
 
 var resolveCmd = &cobra.Command{
@@ -120,14 +121,32 @@ func runResolveYouTube(ctx context.Context) error {
 		}
 		log.Infof("%s: %d of %d tracks need a YouTube id", base, missing, len(p.Tracks))
 
-		n, stop, err := youtube.Resolve(ctx, chain, &p, budget, resolveDelay, report)
+		// Persist incrementally so a long run is granularly resumable, but batch
+		// writes (every resolveFlush resolutions) so we don't rewrite a large
+		// playlist file on every single track.
+		sinceSave := 0
+		save := func() error { return playlist.SaveFile(path, p) }
+		onResolved := func() error {
+			sinceSave++
+			if sinceSave >= resolveFlush {
+				sinceSave = 0
+				return save()
+			}
+			return nil
+		}
+
+		n, stop, err := youtube.Resolve(ctx, chain, &p, budget, resolveDelay, report, onResolved)
+		// Flush any resolutions since the last batched save (also covers an early
+		// stop). Do this before surfacing a resolve error so partial progress sticks.
+		if sinceSave > 0 {
+			if serr := save(); serr != nil {
+				return fmt.Errorf("save %s: %w", path, serr)
+			}
+		}
 		if err != nil {
 			return fmt.Errorf("resolve %s: %w", path, err)
 		}
 		if n > 0 {
-			if err := playlist.SaveFile(path, p); err != nil {
-				return fmt.Errorf("save %s: %w", path, err)
-			}
 			log.Infof("%s: resolved %d id(s), saved", base, n)
 		} else {
 			log.Infof("%s: resolved 0 (nothing to save)", base)
@@ -186,4 +205,5 @@ func init() {
 	resolveYouTubeCmd.Flags().StringVar(&resolveInput, "input", "", "hub YAML file or directory (default: config dir)")
 	resolveYouTubeCmd.Flags().IntVar(&resolveLimit, "limit", 0, "max searches this run (0 = unlimited; quota is the backstop)")
 	resolveYouTubeCmd.Flags().DurationVar(&resolveDelay, "delay", 500*time.Millisecond, "pause between searches to stay under the API rate limit")
+	resolveYouTubeCmd.Flags().IntVar(&resolveFlush, "flush", 20, "write resolved ids to disk every N resolutions (granular resume)")
 }
