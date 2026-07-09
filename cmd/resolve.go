@@ -51,11 +51,32 @@ func runResolveYouTube(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	if len(paths) == 0 {
+		log.Warnf("no playlist YAML files found under %s — nothing to resolve", input)
+		return nil
+	}
 
 	searcher := youtube.HTTPSearcher{APIKey: apiKey}
 	var budget *int
 	if resolveLimit > 0 {
 		budget = &resolveLimit
+		log.Infof("resolving YouTube ids across %d file(s) under %s (limit %d searches)", len(paths), input, resolveLimit)
+	} else {
+		log.Infof("resolving YouTube ids across %d file(s) under %s", len(paths), input)
+	}
+
+	// report narrates each search outcome. Errors go to WARN so they surface
+	// even without --verbose (e.g. a bad key failing every search); hits/misses
+	// are INFO (quiet by default, visible with --verbose).
+	report := func(e youtube.Event) {
+		switch {
+		case e.Err != nil:
+			log.Warnf("  search error: %s - %s: %v", e.Artist, e.Title, e.Err)
+		case e.VideoID != "":
+			log.Infof("  resolved: %s - %s -> %s", e.Artist, e.Title, e.VideoID)
+		default:
+			log.Infof("  no match: %s - %s", e.Artist, e.Title)
+		}
 	}
 
 	total := 0
@@ -65,7 +86,15 @@ func runResolveYouTube(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("load %s: %w", path, err)
 		}
-		n, quota, err := youtube.Resolve(ctx, searcher, &p, budget)
+		missing := countMissingYouTube(p)
+		base := filepath.Base(path)
+		if missing == 0 {
+			log.Infof("%s: all %d tracks already resolved, skipping", base, len(p.Tracks))
+			continue
+		}
+		log.Infof("%s: %d of %d tracks need a YouTube id", base, missing, len(p.Tracks))
+
+		n, quota, err := youtube.Resolve(ctx, searcher, &p, budget, report)
 		if err != nil {
 			return fmt.Errorf("resolve %s: %w", path, err)
 		}
@@ -73,10 +102,13 @@ func runResolveYouTube(ctx context.Context) error {
 			if err := playlist.SaveFile(path, p); err != nil {
 				return fmt.Errorf("save %s: %w", path, err)
 			}
+			log.Infof("%s: resolved %d id(s), saved", base, n)
+		} else {
+			log.Infof("%s: resolved 0 (nothing to save)", base)
 		}
 		total += n
-		log.Infof("resolved %d in %s", n, filepath.Base(path))
 		if quota {
+			log.Warnf("YouTube daily quota exceeded — stopping (progress saved)")
 			stopped = "quota"
 			break
 		}
@@ -85,8 +117,19 @@ func runResolveYouTube(ctx context.Context) error {
 			break
 		}
 	}
-	log.Warnf("youtube resolve: %d ids resolved; stopped: %s", total, stopped)
+	log.Warnf("YouTube resolve done: %d ids resolved; stopped: %s", total, stopped)
 	return nil
+}
+
+// countMissingYouTube counts tracks in p that still lack a YouTube id.
+func countMissingYouTube(p playlist.Playlist) int {
+	n := 0
+	for _, t := range p.Tracks {
+		if t.YouTubeID == "" {
+			n++
+		}
+	}
+	return n
 }
 
 // hubPaths returns the YAML files to process: a single file, or every *.yaml in

@@ -39,7 +39,7 @@ func pl(ids ...string) *playlist.Playlist {
 func TestResolveOnlyFillsEmptyIDs(t *testing.T) {
 	p := pl("", "already", "")
 	f := &fakeSearcher{ids: []string{"v1", "v2"}}
-	n, quota, err := Resolve(context.Background(), f, p, nil)
+	n, quota, err := Resolve(context.Background(), f, p, nil, nil)
 	if err != nil || quota {
 		t.Fatalf("n=%d quota=%v err=%v", n, quota, err)
 	}
@@ -55,7 +55,7 @@ func TestResolveRespectsBudget(t *testing.T) {
 	p := pl("", "", "")
 	f := &fakeSearcher{ids: []string{"v1", "v2", "v3"}}
 	budget := 1
-	n, _, _ := Resolve(context.Background(), f, p, &budget)
+	n, _, _ := Resolve(context.Background(), f, p, &budget, nil)
 	if n != 1 || f.calls != 1 {
 		t.Errorf("resolved=%d calls=%d, want 1/1", n, f.calls)
 	}
@@ -67,7 +67,7 @@ func TestResolveRespectsBudget(t *testing.T) {
 func TestResolveStopsOnQuota(t *testing.T) {
 	p := pl("", "", "")
 	f := &fakeSearcher{ids: []string{"v1", "", ""}, errs: []error{nil, ErrQuotaExceeded, nil}}
-	n, quota, err := Resolve(context.Background(), f, p, nil)
+	n, quota, err := Resolve(context.Background(), f, p, nil, nil)
 	if err != nil {
 		t.Fatalf("err=%v", err)
 	}
@@ -82,12 +82,32 @@ func TestResolveStopsOnQuota(t *testing.T) {
 func TestResolveSkipsSearchErrorAndContinues(t *testing.T) {
 	p := pl("", "")
 	f := &fakeSearcher{ids: []string{"", "v2"}, errs: []error{errSome(), nil}}
-	n, quota, err := Resolve(context.Background(), f, p, nil)
+	n, quota, err := Resolve(context.Background(), f, p, nil, nil)
 	if err != nil || quota {
 		t.Fatalf("n=%d quota=%v err=%v", n, quota, err)
 	}
 	if n != 1 || p.Tracks[0].YouTubeID != "" || p.Tracks[1].YouTubeID != "v2" {
 		t.Errorf("resolved=%d ids=%q", n, []string{p.Tracks[0].YouTubeID, p.Tracks[1].YouTubeID})
+	}
+}
+
+func TestResolveReportsEachOutcome(t *testing.T) {
+	p := pl("", "", "")
+	f := &fakeSearcher{ids: []string{"v1", "", ""}, errs: []error{nil, nil, errSome()}}
+	var events []Event
+	_, _, _ = Resolve(context.Background(), f, p, nil, func(e Event) { events = append(events, e) })
+
+	if len(events) != 3 {
+		t.Fatalf("want 3 events, got %d", len(events))
+	}
+	if events[0].VideoID != "v1" || events[0].Err != nil { // hit
+		t.Errorf("event0 = %+v, want hit v1", events[0])
+	}
+	if events[1].VideoID != "" || events[1].Err != nil { // miss
+		t.Errorf("event1 = %+v, want miss", events[1])
+	}
+	if events[2].Err == nil { // error
+		t.Errorf("event2 = %+v, want error", events[2])
 	}
 }
 
