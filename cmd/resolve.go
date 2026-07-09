@@ -15,10 +15,11 @@ import (
 )
 
 var (
-	resolveInput string
-	resolveLimit int
-	resolveDelay time.Duration
-	resolveFlush int
+	resolveInput     string
+	resolveLimit     int
+	resolveDelay     time.Duration
+	resolveFlush     int
+	resolveReresolve bool
 )
 
 var resolveCmd = &cobra.Command{
@@ -34,15 +35,17 @@ write it back into the YAML. Only missing tracks are attempted, so runs are
 incremental.
 
 Resolvers, tried in order per track:
-  1. yt-dlp — YouTube's own search via the yt-dlp binary ("ytsearch1:..."). Free,
-     no quota, no key. Requires yt-dlp on PATH (or set ytdlp_path). Primary.
+  1. yt-dlp — YouTube's own search via the yt-dlp binary. Searches the top few
+     results and picks the first that allows embedded playback. Free, no quota,
+     no key. Requires yt-dlp on PATH (or set ytdlp_path). Primary.
   2. youtube-search — the YouTube Data API text search, used only as a fallback
      and only when youtube_api_key is set. It spends the ~100 searches/day quota
      and mostly duplicates yt-dlp, so it's rarely needed.
 
 --limit caps tracks attempted per run; --delay paces requests under rate limits.
-Resolution stops early (persisting progress) on quota exhaustion or sustained
-rate limiting.`,
+--reresolve re-checks tracks that already have an id and replaces any that are no
+longer embeddable. Resolution stops early (persisting progress) on quota
+exhaustion or sustained rate limiting.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runResolveYouTube(context.Background())
 	},
@@ -73,7 +76,8 @@ func runResolveYouTube(ctx context.Context) error {
 	if _, err := exec.LookPath(ytdlpBin); err != nil {
 		return fmt.Errorf("%q not found in PATH — install yt-dlp (https://github.com/yt-dlp/yt-dlp) or set ytdlp_path", ytdlpBin)
 	}
-	resolvers := []youtube.Resolver{youtube.YtdlpResolver{Bin: ytdlpBin}}
+	ytdlp := youtube.YtdlpResolver{Bin: ytdlpBin}
+	resolvers := []youtube.Resolver{ytdlp}
 	names := "yt-dlp"
 	if apiKey := viper.GetString("youtube_api_key"); apiKey != "" {
 		resolvers = append(resolvers, youtube.SearchResolver{Searcher: youtube.HTTPSearcher{APIKey: apiKey}})
@@ -115,11 +119,15 @@ func runResolveYouTube(ctx context.Context) error {
 		}
 		missing := countMissingYouTube(p)
 		base := filepath.Base(path)
-		if missing == 0 {
+		if missing == 0 && !resolveReresolve {
 			log.Infof("%s: all %d tracks already resolved, skipping", base, len(p.Tracks))
 			continue
 		}
-		log.Infof("%s: %d of %d tracks need a YouTube id", base, missing, len(p.Tracks))
+		if resolveReresolve {
+			log.Infof("%s: re-resolving (%d of %d missing; existing ids re-checked)", base, missing, len(p.Tracks))
+		} else {
+			log.Infof("%s: %d of %d tracks need a YouTube id", base, missing, len(p.Tracks))
+		}
 
 		// Persist incrementally so a long run is granularly resumable, but batch
 		// writes (every resolveFlush resolutions) so we don't rewrite a large
@@ -145,6 +153,8 @@ func runResolveYouTube(ctx context.Context) error {
 			Pace:       resolveDelay,
 			Report:     report,
 			OnResolved: onResolved,
+			Reresolve:  resolveReresolve,
+			Verify:     ytdlp.IsEmbeddable,
 		})
 		// Flush any resolutions since the last batched save (also covers an early
 		// stop). Do this before surfacing a resolve error so partial progress sticks.
@@ -216,4 +226,5 @@ func init() {
 	resolveYouTubeCmd.Flags().IntVar(&resolveLimit, "limit", 0, "max searches this run (0 = unlimited; quota is the backstop)")
 	resolveYouTubeCmd.Flags().DurationVar(&resolveDelay, "delay", 500*time.Millisecond, "pause between searches to stay under the API rate limit")
 	resolveYouTubeCmd.Flags().IntVar(&resolveFlush, "flush", 20, "write resolved ids to disk every N resolutions (granular resume)")
+	resolveYouTubeCmd.Flags().BoolVar(&resolveReresolve, "reresolve", false, "re-check tracks that already have a youtube_id and replace ones no longer embeddable")
 }

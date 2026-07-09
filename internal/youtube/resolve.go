@@ -31,6 +31,10 @@ type ResolveOptions struct {
 	Pace       time.Duration // if > 0, waits between attempts (rate limiting)
 	Report     func(Event)   // if set, called once per track attempted (narration)
 	OnResolved func() error  // if set, called after each id is filled (incremental persist); a returned error stops the run
+	// Reresolve, with Verify set, re-checks tracks that already have an id: an id
+	// that fails Verify is cleared and resolved fresh; a passing one is kept.
+	Reresolve bool
+	Verify    func(ctx context.Context, videoID string) (bool, error)
 }
 
 // Resolve resolves a YouTube video ID for every track in p that lacks one,
@@ -42,7 +46,9 @@ func Resolve(ctx context.Context, r Resolver, p *playlist.Playlist, opts Resolve
 	attempted := 0
 	for i := range p.Tracks {
 		t := &p.Tracks[i]
-		if t.YouTubeID != "" {
+		// Already-resolved tracks are skipped unless we're re-verifying them.
+		reverify := t.YouTubeID != "" && opts.Reresolve && opts.Verify != nil
+		if t.YouTubeID != "" && !reverify {
 			continue
 		}
 		if opts.Budget != nil && *opts.Budget <= 0 {
@@ -53,12 +59,27 @@ func Resolve(ctx context.Context, r Resolver, p *playlist.Playlist, opts Resolve
 				return resolved, "", err
 			}
 		}
-
-		res, rerr := r.Resolve(ctx, *t)
 		attempted++
 		if opts.Budget != nil {
 			*opts.Budget--
 		}
+
+		// Re-resolve: keep an id that's still embeddable, else clear + re-resolve.
+		if reverify {
+			ok, verr := opts.Verify(ctx, t.YouTubeID)
+			if verr != nil {
+				if opts.Report != nil {
+					opts.Report(Event{Artist: t.Artist, Title: t.Title, Err: verr})
+				}
+				continue // keep the id; skip this track
+			}
+			if ok {
+				continue // still embeddable
+			}
+			t.YouTubeID = "" // not embeddable → resolve fresh below
+		}
+
+		res, rerr := r.Resolve(ctx, *t)
 
 		if errors.Is(rerr, ErrQuotaExceeded) {
 			return resolved, StopQuota, nil

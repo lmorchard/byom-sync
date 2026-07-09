@@ -159,4 +159,61 @@ func TestResolveStopsWhenOnResolvedErrors(t *testing.T) {
 	}
 }
 
+func TestReresolveReplacesNonEmbeddableId(t *testing.T) {
+	p := pl("old")
+	f := &fakeResolver{results: []Result{hit("new")}}
+	n, _, err := Resolve(context.Background(), f, p, ResolveOptions{
+		Reresolve: true,
+		Verify:    func(context.Context, string) (bool, error) { return false, nil }, // not embeddable
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Tracks[0].YouTubeID != "new" || n != 1 || f.calls != 1 {
+		t.Errorf("id=%q resolved=%d calls=%d, want new/1/1", p.Tracks[0].YouTubeID, n, f.calls)
+	}
+}
+
+func TestReresolveKeepsEmbeddableId(t *testing.T) {
+	p := pl("good")
+	f := &fakeResolver{results: []Result{hit("new")}}
+	n, _, err := Resolve(context.Background(), f, p, ResolveOptions{
+		Reresolve: true,
+		Verify:    func(context.Context, string) (bool, error) { return true, nil },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Tracks[0].YouTubeID != "good" || n != 0 || f.calls != 0 {
+		t.Errorf("id=%q resolved=%d calls=%d, want good/0/0 (kept, resolver untouched)", p.Tracks[0].YouTubeID, n, f.calls)
+	}
+}
+
+func TestReresolveVerifyErrorKeepsIdAndContinues(t *testing.T) {
+	p := pl("e1", "") // first has an id (verify errors), second is empty
+	f := &fakeResolver{results: []Result{hit("filled")}}
+	n, _, err := Resolve(context.Background(), f, p, ResolveOptions{
+		Reresolve: true,
+		Verify:    func(context.Context, string) (bool, error) { return false, errors.New("net") },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Tracks[0].YouTubeID != "e1" {
+		t.Errorf("track0 id=%q, want kept e1", p.Tracks[0].YouTubeID)
+	}
+	if p.Tracks[1].YouTubeID != "filled" || n != 1 {
+		t.Errorf("track1 id=%q resolved=%d, want filled/1", p.Tracks[1].YouTubeID, n)
+	}
+}
+
+func TestReresolveOffLeavesExistingIds(t *testing.T) {
+	p := pl("x")
+	f := &fakeResolver{results: []Result{hit("new")}}
+	n, _, _ := Resolve(context.Background(), f, p, ResolveOptions{}) // Reresolve false
+	if p.Tracks[0].YouTubeID != "x" || n != 0 || f.calls != 0 {
+		t.Errorf("id=%q resolved=%d calls=%d, want x/0/0", p.Tracks[0].YouTubeID, n, f.calls)
+	}
+}
+
 func errSome() error { return context.DeadlineExceeded }
