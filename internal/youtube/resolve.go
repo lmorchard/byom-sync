@@ -8,14 +8,26 @@ import (
 	"github.com/lmorchard/byom-sync/internal/playlist"
 )
 
+// EventKind classifies what happened to a track, for narration.
+type EventKind string
+
+const (
+	KindResolved EventKind = "resolved" // a missing track got an id
+	KindMiss     EventKind = "miss"     // no match found
+	KindError    EventKind = "error"    // resolution/verify error (track skipped)
+	KindKept     EventKind = "kept"     // reresolve: existing id still embeddable
+	KindReplaced EventKind = "replaced" // reresolve: non-embeddable id replaced
+	KindRemoved  EventKind = "removed"  // reresolve: non-embeddable id, no alternative — removed
+)
+
 // Event reports the outcome of one track's resolution so the caller can narrate
-// progress. Exactly one state holds: Err set (failed), VideoID set (a hit, with
-// Source naming the resolver), or both empty (no match from any resolver).
+// progress.
 type Event struct {
+	Kind    EventKind
 	Artist  string
 	Title   string
-	VideoID string
-	Source  string
+	VideoID string // the resulting/kept id (empty for miss/removed/error)
+	Source  string // resolver that produced VideoID
 	Err     error
 }
 
@@ -43,6 +55,18 @@ type ResolveOptions struct {
 // resolution error is reported and skipped (that track keeps its empty ID) and
 // does not abort the run. An OnResolved error stops the run.
 func Resolve(ctx context.Context, r Resolver, p *playlist.Playlist, opts ResolveOptions) (resolved int, stopped string, err error) {
+	report := func(e Event) {
+		if opts.Report != nil {
+			opts.Report(e)
+		}
+	}
+	persist := func() error {
+		if opts.OnResolved != nil {
+			return opts.OnResolved()
+		}
+		return nil
+	}
+
 	attempted := 0
 	for i := range p.Tracks {
 		t := &p.Tracks[i]
@@ -65,42 +89,53 @@ func Resolve(ctx context.Context, r Resolver, p *playlist.Playlist, opts Resolve
 		}
 
 		// Re-resolve: keep an id that's still embeddable, else clear + re-resolve.
+		replacing := false
 		if reverify {
 			ok, verr := opts.Verify(ctx, t.YouTubeID)
 			if verr != nil {
-				if opts.Report != nil {
-					opts.Report(Event{Artist: t.Artist, Title: t.Title, Err: verr})
-				}
+				report(Event{Kind: KindError, Artist: t.Artist, Title: t.Title, Err: verr})
 				continue // keep the id; skip this track
 			}
 			if ok {
-				continue // still embeddable
+				report(Event{Kind: KindKept, Artist: t.Artist, Title: t.Title, VideoID: t.YouTubeID})
+				continue
 			}
+			replacing = true
 			t.YouTubeID = "" // not embeddable → resolve fresh below
 		}
 
 		res, rerr := r.Resolve(ctx, *t)
-
 		if errors.Is(rerr, ErrQuotaExceeded) {
 			return resolved, StopQuota, nil
 		}
 		if errors.Is(rerr, ErrRateLimited) {
 			return resolved, StopRateLimit, nil
 		}
-		if opts.Report != nil {
-			opts.Report(Event{Artist: t.Artist, Title: t.Title, VideoID: res.VideoID, Source: res.Source, Err: rerr})
-		}
 		if rerr != nil {
+			report(Event{Kind: KindError, Artist: t.Artist, Title: t.Title, Err: rerr})
 			continue // transient/other error — skip this track, keep going
 		}
+
 		if res.VideoID != "" {
 			t.YouTubeID = res.VideoID
 			resolved++
-			if opts.OnResolved != nil {
-				if err := opts.OnResolved(); err != nil {
-					return resolved, "", err
-				}
+			kind := KindResolved
+			if replacing {
+				kind = KindReplaced
 			}
+			report(Event{Kind: kind, Artist: t.Artist, Title: t.Title, VideoID: res.VideoID, Source: res.Source})
+			if err := persist(); err != nil {
+				return resolved, "", err
+			}
+		} else if replacing {
+			// Non-embeddable id with no embeddable alternative: it's already cleared;
+			// persist the removal so the broken id doesn't linger on disk.
+			report(Event{Kind: KindRemoved, Artist: t.Artist, Title: t.Title})
+			if err := persist(); err != nil {
+				return resolved, "", err
+			}
+		} else {
+			report(Event{Kind: KindMiss, Artist: t.Artist, Title: t.Title})
 		}
 	}
 	return resolved, "", nil

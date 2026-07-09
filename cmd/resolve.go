@@ -96,20 +96,6 @@ func runResolveYouTube(ctx context.Context) error {
 		log.Infof("resolving YouTube ids across %d file(s) under %s [%s] (delay %s)", len(paths), input, names, resolveDelay)
 	}
 
-	// report narrates each track's outcome. Errors go to WARN so they always
-	// surface; per-track hits/misses are DEBUG (--verbose) since coarse progress
-	// (per-file counts + checkpoints) already shows by default.
-	report := func(e youtube.Event) {
-		switch {
-		case e.Err != nil:
-			log.Warnf("  error: %s - %s: %v", e.Artist, e.Title, e.Err)
-		case e.VideoID != "":
-			log.Debugf("  resolved: %s - %s -> %s (via %s)", e.Artist, e.Title, e.VideoID, e.Source)
-		default:
-			log.Debugf("  no match: %s - %s", e.Artist, e.Title)
-		}
-	}
-
 	total := 0
 	stopped := "done"
 	for _, path := range paths {
@@ -127,6 +113,30 @@ func runResolveYouTube(ctx context.Context) error {
 			log.Infof("%s: re-resolving (%d of %d missing; existing ids re-checked)", base, missing, len(p.Tracks))
 		} else {
 			log.Infof("%s: %d of %d tracks need a YouTube id", base, missing, len(p.Tracks))
+		}
+
+		// Per-track narration + per-file tallies. Errors/removals go to WARN so
+		// they surface without --verbose; the rest are DEBUG (--verbose).
+		var got, kept, replaced, removed int
+		report := func(e youtube.Event) {
+			switch e.Kind {
+			case youtube.KindResolved:
+				got++
+				log.Debugf("  resolved: %s - %s -> %s (via %s)", e.Artist, e.Title, e.VideoID, e.Source)
+			case youtube.KindReplaced:
+				replaced++
+				log.Debugf("  replaced: %s - %s -> %s (was non-embeddable)", e.Artist, e.Title, e.VideoID)
+			case youtube.KindKept:
+				kept++
+				log.Debugf("  kept: %s - %s (still embeddable)", e.Artist, e.Title)
+			case youtube.KindRemoved:
+				removed++
+				log.Warnf("  removed: %s - %s (non-embeddable, no alternative found)", e.Artist, e.Title)
+			case youtube.KindMiss:
+				log.Debugf("  no match: %s - %s", e.Artist, e.Title)
+			case youtube.KindError:
+				log.Warnf("  error: %s - %s: %v", e.Artist, e.Title, e.Err)
+			}
 		}
 
 		// Persist incrementally so a long run is granularly resumable, but batch
@@ -166,10 +176,12 @@ func runResolveYouTube(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("resolve %s: %w", path, err)
 		}
-		if n > 0 {
-			log.Infof("%s: resolved %d id(s), saved", base, n)
+		if resolveReresolve {
+			log.Infof("%s: re-checked — %d kept, %d replaced, %d removed, %d newly resolved", base, kept, replaced, removed, got)
+		} else if got > 0 {
+			log.Infof("%s: resolved %d id(s), saved", base, got)
 		} else {
-			log.Infof("%s: resolved 0 (nothing to save)", base)
+			log.Infof("%s: nothing resolved", base)
 		}
 		total += n
 		if stop == youtube.StopQuota {

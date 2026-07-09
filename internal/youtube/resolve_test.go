@@ -216,4 +216,32 @@ func TestReresolveOffLeavesExistingIds(t *testing.T) {
 	}
 }
 
+func TestReresolveEmitsKindsAndPersistsChanges(t *testing.T) {
+	// track0 stays (embeddable), track1 replaced, track2 removed (no alt), track3 filled.
+	p := pl("keep", "bad", "gone", "")
+	f := &fakeResolver{results: []Result{hit("new1"), {}, hit("new3")}} // resolve calls: track1, track2, track3
+	var kinds []EventKind
+	saves := 0
+	_, _, err := Resolve(context.Background(), f, p, ResolveOptions{
+		Reresolve:  true,
+		Verify:     func(_ context.Context, id string) (bool, error) { return id == "keep", nil },
+		Report:     func(e Event) { kinds = append(kinds, e.Kind) },
+		OnResolved: func() error { saves++; return nil },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []EventKind{KindKept, KindReplaced, KindRemoved, KindResolved}
+	if len(kinds) != 4 || kinds[0] != want[0] || kinds[1] != want[1] || kinds[2] != want[2] || kinds[3] != want[3] {
+		t.Errorf("kinds=%v, want %v", kinds, want)
+	}
+	if p.Tracks[0].YouTubeID != "keep" || p.Tracks[1].YouTubeID != "new1" ||
+		p.Tracks[2].YouTubeID != "" || p.Tracks[3].YouTubeID != "new3" {
+		t.Errorf("ids=%v", []string{p.Tracks[0].YouTubeID, p.Tracks[1].YouTubeID, p.Tracks[2].YouTubeID, p.Tracks[3].YouTubeID})
+	}
+	if saves != 3 { // replaced, removed, resolved each persist; kept does not
+		t.Errorf("saves=%d, want 3 (replace+remove+resolve persist)", saves)
+	}
+}
+
 func errSome() error { return context.DeadlineExceeded }
