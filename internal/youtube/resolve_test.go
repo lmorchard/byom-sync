@@ -44,7 +44,7 @@ func pl(ids ...string) *playlist.Playlist {
 func TestResolveOnlyFillsEmptyIDs(t *testing.T) {
 	p := pl("", "already", "")
 	f := &fakeResolver{results: []Result{hit("v1"), hit("v2")}}
-	n, stopped, err := Resolve(context.Background(), f, p, nil, 0, nil, nil)
+	n, stopped, err := Resolve(context.Background(), f, p, ResolveOptions{})
 	if err != nil || stopped != "" {
 		t.Fatalf("n=%d stopped=%q err=%v", n, stopped, err)
 	}
@@ -60,7 +60,7 @@ func TestResolveRespectsBudget(t *testing.T) {
 	p := pl("", "", "")
 	f := &fakeResolver{results: []Result{hit("v1"), hit("v2"), hit("v3")}}
 	budget := 1
-	n, _, _ := Resolve(context.Background(), f, p, &budget, 0, nil, nil)
+	n, _, _ := Resolve(context.Background(), f, p, ResolveOptions{Budget: &budget})
 	if n != 1 || f.calls != 1 {
 		t.Errorf("resolved=%d calls=%d, want 1/1", n, f.calls)
 	}
@@ -72,7 +72,7 @@ func TestResolveRespectsBudget(t *testing.T) {
 func TestResolveStopsOnQuota(t *testing.T) {
 	p := pl("", "", "")
 	f := &fakeResolver{results: []Result{hit("v1"), {}, {}}, errs: []error{nil, ErrQuotaExceeded, nil}}
-	n, stopped, err := Resolve(context.Background(), f, p, nil, 0, nil, nil)
+	n, stopped, err := Resolve(context.Background(), f, p, ResolveOptions{})
 	if err != nil {
 		t.Fatalf("err=%v", err)
 	}
@@ -87,7 +87,7 @@ func TestResolveStopsOnQuota(t *testing.T) {
 func TestResolveStopsOnRateLimit(t *testing.T) {
 	p := pl("", "", "")
 	f := &fakeResolver{results: []Result{hit("v1"), {}, {}}, errs: []error{nil, ErrRateLimited, nil}}
-	n, stopped, err := Resolve(context.Background(), f, p, nil, 0, nil, nil)
+	n, stopped, err := Resolve(context.Background(), f, p, ResolveOptions{})
 	if err != nil {
 		t.Fatalf("err=%v", err)
 	}
@@ -99,7 +99,7 @@ func TestResolveStopsOnRateLimit(t *testing.T) {
 func TestResolveSkipsErrorAndContinues(t *testing.T) {
 	p := pl("", "")
 	f := &fakeResolver{results: []Result{{}, hit("v2")}, errs: []error{errSome(), nil}}
-	n, stopped, err := Resolve(context.Background(), f, p, nil, 0, nil, nil)
+	n, stopped, err := Resolve(context.Background(), f, p, ResolveOptions{})
 	if err != nil || stopped != "" {
 		t.Fatalf("n=%d stopped=%q err=%v", n, stopped, err)
 	}
@@ -112,7 +112,7 @@ func TestResolveReportsEachOutcome(t *testing.T) {
 	p := pl("", "", "")
 	f := &fakeResolver{results: []Result{{VideoID: "v1", Source: "odesli"}, {}, {}}, errs: []error{nil, nil, errSome()}}
 	var events []Event
-	_, _, _ = Resolve(context.Background(), f, p, nil, 0, func(e Event) { events = append(events, e) }, nil)
+	_, _, _ = Resolve(context.Background(), f, p, ResolveOptions{Report: func(e Event) { events = append(events, e) }})
 
 	if len(events) != 3 {
 		t.Fatalf("want 3 events, got %d", len(events))
@@ -132,9 +132,11 @@ func TestResolveCallsOnResolvedPerResolution(t *testing.T) {
 	p := pl("", "already", "", "")
 	f := &fakeResolver{results: []Result{hit("v1"), {}, hit("v4")}} // 3 attempts: hit, miss, hit
 	saves := 0
-	n, _, err := Resolve(context.Background(), f, p, nil, 0, nil, func() error {
-		saves++
-		return nil
+	n, _, err := Resolve(context.Background(), f, p, ResolveOptions{
+		OnResolved: func() error {
+			saves++
+			return nil
+		},
 	})
 	if err != nil {
 		t.Fatalf("err=%v", err)
@@ -148,7 +150,7 @@ func TestResolveStopsWhenOnResolvedErrors(t *testing.T) {
 	p := pl("", "", "")
 	f := &fakeResolver{results: []Result{hit("v1"), hit("v2"), hit("v3")}}
 	boom := context.DeadlineExceeded
-	n, _, err := Resolve(context.Background(), f, p, nil, 0, nil, func() error { return boom })
+	n, _, err := Resolve(context.Background(), f, p, ResolveOptions{OnResolved: func() error { return boom }})
 	if !errors.Is(err, boom) {
 		t.Fatalf("want persist error surfaced, got %v", err)
 	}

@@ -140,7 +140,12 @@ func runResolveYouTube(ctx context.Context) error {
 			return nil
 		}
 
-		n, stop, err := youtube.Resolve(ctx, chain, &p, budget, resolveDelay, report, onResolved)
+		n, stop, err := youtube.Resolve(ctx, chain, &p, youtube.ResolveOptions{
+			Budget:     budget,
+			Pace:       resolveDelay,
+			Report:     report,
+			OnResolved: onResolved,
+		})
 		// Flush any resolutions since the last batched save (also covers an early
 		// stop). Do this before surfacing a resolve error so partial progress sticks.
 		if sinceSave > 0 {
