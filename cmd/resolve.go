@@ -125,12 +125,17 @@ func runResolveYouTube(ctx context.Context) error {
 		// writes (every resolveFlush resolutions) so we don't rewrite a large
 		// playlist file on every single track.
 		sinceSave := 0
+		savedTotal := 0
 		save := func() error { return playlist.SaveFile(path, p) }
 		onResolved := func() error {
 			sinceSave++
+			savedTotal++
 			if sinceSave >= resolveFlush {
 				sinceSave = 0
-				return save()
+				if err := save(); err != nil {
+					return err
+				}
+				log.Infof("  %s: checkpoint — %d ids saved to disk", base, savedTotal)
 			}
 			return nil
 		}
