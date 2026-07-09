@@ -37,6 +37,22 @@ player, and can repair ids already in the hub.
   repairs the non-embeddable ids already in the hub. (Re-resolve is slower — full
   extraction per existing id — so a `--limit` per run is sensible.)
 
+## Narration (Les, during trial)
+
+A `--reresolve` trial looked broken: 24s of silence then "resolved 0 (nothing to
+save)". It was actually correct (first N ids all embeddable → kept → hit --limit),
+but kept-verifies emitted no narration and the summary read like failure. Fixed:
+
+- `Event` carries a `Kind` (resolved/kept/replaced/removed/miss/error); the command
+  narrates each track (`kept: … (still embeddable)`, `replaced: … -> new`,
+  `removed: …` at WARN) and a per-file tally (`re-checked — N kept, M replaced,
+  …`).
+- Also fixed: a non-embeddable id with no embeddable alternative is now removed
+  *and persisted* (the in-memory clear previously wasn't saved, since OnResolved
+  only fired on a new id).
+- Note: `--limit` counts every re-check (each is a yt-dlp verify), so a full
+  repair pass wants a large/no limit.
+
 ## Follow-ups
 
 - byom-player #14 (handle 101/150 → unavailable/skip) — defensive, still worth it.
