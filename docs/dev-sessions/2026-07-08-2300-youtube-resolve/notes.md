@@ -1,5 +1,26 @@
 # Notes: byom-sync YouTube resolution
 
+## Live-testing follow-ups (Les, after first manual runs)
+
+Three fixes came out of Les running it against his real key:
+
+1. **Narration.** The command was near-silent — `Resolve` swallowed per-track
+   search errors and only a terminal summary printed. `Resolve` now reports each
+   outcome via a callback; the command logs a start line, per-file counts, and
+   per-track results. Hits/misses at INFO (`--verbose`); search errors, quota,
+   rate-limit, and summary at WARN (always visible).
+2. **Surfaced API error detail.** Non-2xx responses now include Google's own
+   reason/message (e.g. "API key not valid", referrer restrictions) instead of a
+   bare `HTTP 400`. This demystified the "same key works in byom-player" question:
+   the browser sends a Referer that a referrer-restricted key needs; a CLI call
+   does not — that shows as a specific reason now.
+3. **Rate limiting (429).** Firing all searches in a burst tripped the per-interval
+   rate limit — every request came back 429. `HTTPSearcher` now retries 429 with
+   backoff (honoring `Retry-After`) and returns `ErrRateLimited` if it persists;
+   `Resolve` paces searches (`--delay`, default 500ms) and stops cleanly on
+   sustained rate limiting or quota (distinct stop reasons). `--delay` is tunable
+   if 500ms still trips the limit.
+
 ## Summary
 
 Added `byom-sync resolve youtube`, which searches the YouTube Data API for hub
