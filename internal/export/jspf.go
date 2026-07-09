@@ -24,12 +24,25 @@ type jspfPlaylist struct {
 }
 
 type jspfTrack struct {
-	Title      string   `json:"title,omitempty"`
-	Creator    string   `json:"creator,omitempty"`
-	Album      string   `json:"album,omitempty"`
-	Duration   int      `json:"duration,omitempty"`
-	Identifier []string `json:"identifier,omitempty"`
-	Location   []string `json:"location,omitempty"`
+	Title      string               `json:"title,omitempty"`
+	Creator    string               `json:"creator,omitempty"`
+	Album      string               `json:"album,omitempty"`
+	Duration   int                  `json:"duration,omitempty"`
+	Identifier []string             `json:"identifier,omitempty"`
+	Location   []string             `json:"location,omitempty"`
+	Extension  map[string][]jspfExt `json:"extension,omitempty"`
+}
+
+// byomExtNS namespaces byom-sync's JSPF track extension (resolved ids now, and
+// sync_state later). Kept in sync with byom-player's reader.
+const byomExtNS = "https://github.com/lmorchard/byom-sync"
+
+type jspfExt struct {
+	Resolved *jspfResolved `json:"resolved,omitempty"`
+}
+
+type jspfResolved struct {
+	YouTube string `json:"youtube,omitempty"`
 }
 
 func (JSPFExporter) Export(p playlist.Playlist, outputPath string, _ map[string]string) error {
@@ -54,6 +67,11 @@ func (JSPFExporter) Export(p playlist.Playlist, outputPath string, _ map[string]
 		}
 		if t.SpotifyURL != "" {
 			jt.Location = []string{t.SpotifyURL}
+		}
+		if t.YouTubeID != "" {
+			jt.Extension = map[string][]jspfExt{
+				byomExtNS: {{Resolved: &jspfResolved{YouTube: t.YouTubeID}}},
+			}
 		}
 		doc.Playlist.Track = append(doc.Playlist.Track, jt)
 	}

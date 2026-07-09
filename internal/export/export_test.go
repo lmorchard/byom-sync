@@ -196,3 +196,37 @@ func TestRun_FileModeSingleOutput(t *testing.T) {
 		t.Errorf("expected single output file at %s: %v", outFile, err)
 	}
 }
+
+func TestJSPFExportEmitsYouTubeExtension(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "out.jspf.json")
+	p := samplePlaylist()
+	p.Tracks[0].YouTubeID = "vid42"
+	if err := (JSPFExporter{}).Export(p, out, nil); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(out)
+
+	var doc struct {
+		Playlist struct {
+			Track []struct {
+				Extension map[string][]struct {
+					Resolved struct {
+						YouTube string `json:"youtube"`
+					} `json:"resolved"`
+				} `json:"extension"`
+			} `json:"track"`
+		} `json:"playlist"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	ext := doc.Playlist.Track[0].Extension["https://github.com/lmorchard/byom-sync"]
+	if len(ext) == 0 || ext[0].Resolved.YouTube != "vid42" {
+		t.Errorf("missing/incorrect youtube extension:\n%s", raw)
+	}
+	// Track without a YouTubeID emits no extension key.
+	if len(doc.Playlist.Track[1].Extension) != 0 {
+		t.Errorf("track 2 should have no extension, got %v", doc.Playlist.Track[1].Extension)
+	}
+}
