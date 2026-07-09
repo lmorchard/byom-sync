@@ -12,6 +12,10 @@ redirect_port: 8888
 # Directory where per-playlist YAML files are stored / synced.
 dir: "./playlists"
 
+# YouTube Data API key for `byom-sync resolve youtube` (or set YOUTUBE_API_KEY).
+# Leave empty to disable YouTube resolution.
+youtube_api_key: ""
+
 # Playlists to sync when `byom-sync sync` is run with no positional arguments.
 # Accepts raw IDs, spotify:playlist:<id> URIs, or open.spotify.com URLs.
 playlists:
