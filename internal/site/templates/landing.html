@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>{{template "head" .}}</head>
+<body class="landing">
+<header class="site-header"><h1>{{.Site.Title}}</h1></header>
+<main>
+{{if .Intro}}<section class="intro">{{.Intro}}</section>{{end}}
+<section class="tree">{{template "treeList" .Root.Children}}</section>
+</main>
+{{template "footer" .}}
+</body>
+</html>
+
+{{define "treeList"}}
+<ul class="tree-list">
+{{range .}}
+  <li class="{{if .IsDir}}dir{{else}}leaf{{end}}">
+    <a href="/{{.Path}}/">{{if .IsDir}}📁 {{end}}{{.Title}}</a>
+    {{if .IsDir}}{{template "treeList" .Children}}{{end}}
+  </li>
+{{end}}
+</ul>
+{{end}}

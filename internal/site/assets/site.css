@@ -1,0 +1,15 @@
+:root { color-scheme: dark; --bg:#111; --fg:#eee; --muted:#888; --accent:#a48cff; }
+* { box-sizing: border-box; }
+body { margin:0; padding:1.5rem; background:var(--bg); color:var(--fg); font-family:system-ui,sans-serif; line-height:1.5; max-width:52rem; margin-inline:auto; }
+a { color:var(--accent); }
+.site-header h1, .site-header a { font-size:1.4rem; font-weight:700; text-decoration:none; }
+.crumbs { color:var(--muted); font-size:.85rem; margin:.5rem 0 1rem; }
+.tree-list { list-style:none; padding-left:1rem; }
+.tree-list > li { margin:.25rem 0; }
+.intro { opacity:.9; }
+.site-footer { margin-top:2rem; color:var(--muted); font-size:.8rem; }
+.tracklist { color:var(--muted); }
+byom-player { display:block; max-width:36rem; margin:1rem 0; }
+byom-site-nav { display:block; margin:1rem 0; }
+body.embed { padding:.5rem; }
+.embed-attribution { display:block; font-size:.75rem; color:var(--muted); margin-top:.4rem; }
