@@ -18,6 +18,7 @@ const (
 	KindAmbiguous EventKind = "ambiguous" // no confident match; candidates recorded
 	KindMiss      EventKind = "miss"      // no search results at all
 	KindError     EventKind = "error"     // lookup error (track left unchanged)
+	KindSkipped   EventKind = "skipped"   // spotify:false — opted out of enrichment
 )
 
 // Event reports the outcome of one track so the caller can narrate progress.
@@ -91,6 +92,15 @@ func Enrich(ctx context.Context, s Searcher, p *playlist.Playlist, opts Options)
 	attempted := 0
 	for i := range p.Tracks {
 		t := &p.Tracks[i]
+
+		// spotify:false opts the track out of enrichment entirely. Clear any stale
+		// candidates so marking + re-running tidies up the junk left from before.
+		if t.Spotify != nil && !*t.Spotify {
+			t.EnrichCandidates = nil
+			report(Event{Kind: KindSkipped, Artist: t.Artist, Title: t.Title})
+			continue
+		}
+
 		picked := t.SpotifyID != "" && len(t.EnrichCandidates) > 0
 		if t.SpotifyID != "" && !picked {
 			continue // already enriched

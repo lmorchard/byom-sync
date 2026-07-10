@@ -72,7 +72,8 @@ errcheck findings CI caught).
   `client_id`, `redirect_port` (8888), `dir`, `playlists`. Register the Spotify
   app redirect URI as exactly `http://127.0.0.1:8888/callback`.
 - **Sync:** per-playlist YAML matched on `spotify_id` (filename is cosmetic).
-  Track identity = ISRC, falling back to normalized `artist+title`. `archive`
+  Track identity (`Track.Key()`) = ISRC, falling back to normalized
+  `artist+title+album` (`ContentKey()`). `archive`
   (default) soft-orphans removed tracks (`spotify_present:false` +
   `date_orphaned`); `mirror` overwrites. Playlist selection: config `playlists`
   by default, positional args override, `--all` = all owned. Catalog-removed
@@ -95,13 +96,18 @@ errcheck findings CI caught).
   unless `--canonicalize`. Only matches scoring ≥ threshold (0.8, in
   `spotifyenrich`) auto-fill; below that, the track's top matches are written as
   `enrich_candidates` — accept one by copying its `spotify_id` up to the track's
-  own `spotify_id` and re-running. Recommended pipeline order:
+  own `spotify_id` and re-running. Set `spotify: false` on a track (a `*bool`:
+  absent/`true` = enrich, `false` = opt out) to assert it has no Spotify
+  equivalent — `resolve spotify` then skips it and clears any stale candidates.
+  Recommended pipeline order:
   author/`sync` → `resolve spotify` → `resolve youtube` → `export`, so YouTube
   resolution and its cache are keyed on the enriched ISRC (`Track.Key()` is
   ISRC-first).
 - **Exporters:** m3u8 builds `{prefix}/{Artist}/{Album}/{Title}.{ext}` paths
-  verbatim; jspf uses `urn:isrc:` identifiers + `location` (spotify_url); markdown
-  is frontmatter + tracklist table via the embedded, init-overridable template.
+  verbatim; jspf uses `urn:isrc:` identifiers (or a synthesized
+  `urn:byom:<sha1(ContentKey)>` when a track has no ISRC, so every track is
+  addressable) + `location` (spotify_url); markdown is frontmatter + tracklist
+  table via the embedded, init-overridable template.
 
 ## CI / release
 

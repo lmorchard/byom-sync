@@ -240,3 +240,46 @@ func TestEnrich_SearchErrorReported(t *testing.T) {
 		t.Errorf("track should remain unenriched after search error: %+v", p.Tracks[0])
 	}
 }
+
+func TestEnrich_SpotifyFalseSkipsAndClearsCandidates(t *testing.T) {
+	no := false
+	p := &playlist.Playlist{Tracks: []playlist.Track{{
+		Title: "Tragedy For You", Artist: "Darkness On Demand",
+		Spotify:          &no,
+		EnrichCandidates: []playlist.EnrichCandidate{{SpotifyID: "junk", Title: "Unrelated"}},
+	}}}
+	s := &fakeSearcher{byTitle: map[string][]Candidate{
+		"Tragedy For You": {{SpotifyID: "x", Title: "Tragedy For You", Artist: "Darkness On Demand"}},
+	}}
+	var kinds []EventKind
+	n, _ := Enrich(context.Background(), s, p, Options{Report: func(e Event) { kinds = append(kinds, e.Kind) }})
+
+	if s.calls != 0 {
+		t.Errorf("spotify:false track must not be searched: calls=%d", s.calls)
+	}
+	if n != 0 || len(kinds) != 1 || kinds[0] != KindSkipped {
+		t.Fatalf("expected one skipped event: n=%d kinds=%v", n, kinds)
+	}
+	if p.Tracks[0].SpotifyID != "" {
+		t.Errorf("spotify:false track must not be enriched: %+v", p.Tracks[0])
+	}
+	if len(p.Tracks[0].EnrichCandidates) != 0 {
+		t.Errorf("stale candidates should be cleared on skip: %+v", p.Tracks[0].EnrichCandidates)
+	}
+}
+
+func TestEnrich_SpotifyTrueAndNilEnrichNormally(t *testing.T) {
+	yes := true
+	p := &playlist.Playlist{Tracks: []playlist.Track{
+		{Title: "One", Artist: "A", Spotify: &yes},
+		{Title: "Two", Artist: "B"}, // nil
+	}}
+	s := &fakeSearcher{byTitle: map[string][]Candidate{
+		"One": {{SpotifyID: "1", Title: "One", Artist: "A"}},
+		"Two": {{SpotifyID: "2", Title: "Two", Artist: "B"}},
+	}}
+	n, _ := Enrich(context.Background(), s, p, Options{})
+	if n != 2 || s.calls != 2 {
+		t.Errorf("spotify:true and nil should both enrich normally: n=%d calls=%d", n, s.calls)
+	}
+}
