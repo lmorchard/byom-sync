@@ -82,7 +82,7 @@ func (JSPFExporter) Export(p playlist.Playlist, outputPath string, _ map[string]
 			ext.Resolved = &jspfResolved{YouTube: t.YouTubeID}
 			hasExt = true
 		}
-		if !t.SyncState.SpotifyPresent {
+		if p.Source() == playlist.SourceSpotify && !t.SyncState.SpotifyPresent {
 			absent := false
 			ext.SpotifyPresent = &absent
 			ext.DateOrphaned = t.SyncState.DateOrphaned
