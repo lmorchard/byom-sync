@@ -23,7 +23,7 @@ YouTube resolution cache in `internal/rcache/` — an index, not a source of tru
 ## Layout
 
 - `cmd/` — Cobra commands: `root`, `version`, `init`, `auth`, `sync`, `import`,
-  `export`, `resolve` (subcommands `youtube`, `prime`, `cache stats`,
+  `export`, `resolve` (subcommands `youtube`, `spotify`, `prime`, `cache stats`,
   `cache clear`).
 - `internal/playlist/` — the hub: `types.go` (`Playlist`/`Track`/`SyncState`,
   `Track.Key()`), `store.go` (`Load`/`LoadFile`/`FindFileByID`/`Save`/`Slug`),
@@ -37,9 +37,15 @@ YouTube resolution cache in `internal/rcache/` — an index, not a source of tru
 - `internal/youtube/` — resolver chain: `resolver.go` (`Resolver`/`Chain`/`Result`),
   `ytdlp.go` (yt-dlp search + `IsEmbeddable`), `youtube.go` (Data API search),
   `resolve.go` (`Resolve` loop, `ResolveOptions`, `Cache` interface, TTL logic).
-- `internal/rcache/` — SQLite resolution cache: `Entry`, `Open`/`Get`/`Put`/
-  `Stats`/`Clear`. Keyed by `Track.Key()`; DB at `$XDG_CONFIG_HOME/byom-sync/cache.db`
-  (gitignored, disposable — `resolve prime` rebuilds positives from the hub).
+- `internal/spotifyenrich/` — reverse enrichment: `score.go` (`Candidate`,
+  `Score`, similarity), `search.go` (`Searcher`/`ClientSearcher`, `buildQuery`,
+  `toCandidate`, image pick), `enrich.go` (`Enrich` loop, `Options`, `Event`,
+  `Cache`, `applyCandidate`). Fills empty technical fields on confident matches;
+  writes `enrich_candidates` for ambiguous ones.
+- `internal/rcache/` — SQLite cache with two tables in one `cache.db`:
+  `resolution_cache` (YouTube: `Entry`, `Get`/`Put`) and `enrichment_cache`
+  (Spotify: `EnrichEntry`, `GetEnrich`/`PutEnrich`). `Stats`/`EnrichStats`/`Clear`
+  span both; keyed by `Track.Key()`; gitignored, disposable.
 - `internal/config/`, `internal/templates/` (embedded Markdown template).
 
 ## Commands (Makefile-first)
@@ -83,6 +89,16 @@ errcheck findings CI caught).
   (`playlist.ParseText`; `# title:`/`# creator:` header lines, split on the first
   ` - `, malformed lines skipped with a warning); writes `<dir>/<slug>.yaml`,
   refusing to overwrite without `--force`.
+- **Enrichment (reverse path):** `resolve spotify` searches Spotify per track and
+  fills only *empty* technical fields (`isrc`, `spotify_id`, `spotify_url`,
+  `duration_ms`, `album`, `image`), preserving authored `title`/`artist`/`album`
+  unless `--canonicalize`. Only matches scoring ≥ threshold (0.8, in
+  `spotifyenrich`) auto-fill; below that, the track's top matches are written as
+  `enrich_candidates` — accept one by copying its `spotify_id` up to the track's
+  own `spotify_id` and re-running. Recommended pipeline order:
+  author/`sync` → `resolve spotify` → `resolve youtube` → `export`, so YouTube
+  resolution and its cache are keyed on the enriched ISRC (`Track.Key()` is
+  ISRC-first).
 - **Exporters:** m3u8 builds `{prefix}/{Artist}/{Album}/{Title}.{ext}` paths
   verbatim; jspf uses `urn:isrc:` identifiers + `location` (spotify_url); markdown
   is frontmatter + tracklist table via the embedded, init-overridable template.

@@ -1,6 +1,7 @@
 package playlist
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -84,5 +85,36 @@ func TestTrack_Key(t *testing.T) {
 	noISRC := Track{Title: "  Hello World ", Artist: "The Band"}
 	if got := noISRC.Key(); got != "at:the band\thello world" {
 		t.Errorf("artist+title key: got %q", got)
+	}
+}
+
+func TestTrack_EnrichFieldsRoundTrip(t *testing.T) {
+	orig := Track{
+		Title:  "Nightcall",
+		Artist: "Kavinsky",
+		Image:  "https://img/cover.jpg",
+		EnrichCandidates: []EnrichCandidate{
+			{SpotifyID: "0lVo", Title: "Nightcall", Artist: "Kavinsky, Lovefoxxx", Album: "Nightcall", ISRC: "FR123", DurationMS: 258000, Score: 0.74},
+		},
+	}
+	data, err := yaml.Marshal(orig)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var got Track
+	if err := yaml.Unmarshal(data, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.Image != "https://img/cover.jpg" {
+		t.Errorf("image: got %q", got.Image)
+	}
+	if len(got.EnrichCandidates) != 1 || got.EnrichCandidates[0].SpotifyID != "0lVo" || got.EnrichCandidates[0].Score != 0.74 {
+		t.Errorf("candidates: got %+v", got.EnrichCandidates)
+	}
+
+	// omitempty: a plain track emits neither field.
+	bare, _ := yaml.Marshal(Track{Title: "T", Artist: "A"})
+	if s := string(bare); strings.Contains(s, "image:") || strings.Contains(s, "enrich_candidates:") {
+		t.Errorf("bare track should omit image/enrich_candidates:\n%s", s)
 	}
 }
