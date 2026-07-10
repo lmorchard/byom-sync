@@ -1,6 +1,8 @@
 package spotifyfetch
 
 import (
+	"context"
+	"fmt"
 	"testing"
 
 	"github.com/zmb3/spotify/v2"
@@ -139,5 +141,63 @@ func TestConvert(t *testing.T) {
 	}
 	if !got.SyncState.SpotifyPresent {
 		t.Errorf("should be marked present")
+	}
+}
+
+type fakeTrackGetter struct {
+	byID  map[string]*spotify.FullTrack
+	calls [][]spotify.ID
+}
+
+func (f *fakeTrackGetter) GetTracks(_ context.Context, ids []spotify.ID, _ ...spotify.RequestOption) ([]*spotify.FullTrack, error) {
+	f.calls = append(f.calls, ids)
+	out := make([]*spotify.FullTrack, len(ids))
+	for i, id := range ids {
+		out[i] = f.byID[string(id)] // nil when absent
+	}
+	return out, nil
+}
+
+func TestFetchTrackArt(t *testing.T) {
+	withArt := func(id, url string) *spotify.FullTrack {
+		return &spotify.FullTrack{
+			SimpleTrack: spotify.SimpleTrack{ID: spotify.ID(id)},
+			Album:       spotify.SimpleAlbum{Images: []spotify.Image{{URL: url, Width: 640}}},
+		}
+	}
+	g := &fakeTrackGetter{byID: map[string]*spotify.FullTrack{
+		"a": withArt("a", "art-a"),
+		"c": withArt("c", ""), // resolved but no images -> skipped
+		// "b" not found -> nil
+	}}
+	got, err := FetchTrackArt(context.Background(), g, []string{"a", "b", "c"}, 640)
+	if err != nil {
+		t.Fatalf("FetchTrackArt: %v", err)
+	}
+	if got["a"] != "art-a" {
+		t.Errorf("a: got %q", got["a"])
+	}
+	if _, ok := got["b"]; ok {
+		t.Errorf("not-found id should be absent: %v", got["b"])
+	}
+	if _, ok := got["c"]; ok {
+		t.Errorf("no-image id should be absent: %v", got["c"])
+	}
+}
+
+func TestFetchTrackArt_Chunks(t *testing.T) {
+	ids := make([]string, 120)
+	for i := range ids {
+		ids[i] = fmt.Sprintf("id%d", i)
+	}
+	g := &fakeTrackGetter{byID: map[string]*spotify.FullTrack{}}
+	if _, err := FetchTrackArt(context.Background(), g, ids, 640); err != nil {
+		t.Fatalf("FetchTrackArt: %v", err)
+	}
+	if len(g.calls) != 3 { // 120 ids -> 50 + 50 + 20
+		t.Errorf("expected 3 chunked calls, got %d", len(g.calls))
+	}
+	if len(g.calls[0]) != 50 || len(g.calls[2]) != 20 {
+		t.Errorf("chunk sizes wrong: %d / %d", len(g.calls[0]), len(g.calls[2]))
 	}
 }

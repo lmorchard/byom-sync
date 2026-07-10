@@ -113,6 +113,45 @@ func selectOwnedIDs(playlists []spotify.SimplePlaylist, userID string, includeFo
 	return ids
 }
 
+// TrackGetter fetches full tracks by id (satisfied by *spotify.Client). Abstracted
+// for testability.
+type TrackGetter interface {
+	GetTracks(ctx context.Context, ids []spotify.ID, opts ...spotify.RequestOption) ([]*spotify.FullTrack, error)
+}
+
+// artBatchSize is the Spotify GetTracks per-call id limit.
+const artBatchSize = 50
+
+// FetchTrackArt returns a map of spotify track id -> best album-image URL for the
+// given ids, fetched in batches of 50. Ids that don't resolve, or resolve without
+// album art, are simply absent from the map.
+func FetchTrackArt(ctx context.Context, g TrackGetter, ids []string, maxWidth int) (map[string]string, error) {
+	out := make(map[string]string, len(ids))
+	for start := 0; start < len(ids); start += artBatchSize {
+		end := start + artBatchSize
+		if end > len(ids) {
+			end = len(ids)
+		}
+		chunk := make([]spotify.ID, 0, end-start)
+		for _, id := range ids[start:end] {
+			chunk = append(chunk, spotify.ID(id))
+		}
+		tracks, err := g.GetTracks(ctx, chunk)
+		if err != nil {
+			return nil, fmt.Errorf("get tracks: %w", err)
+		}
+		for _, ft := range tracks {
+			if ft == nil {
+				continue
+			}
+			if url := PickImage(ft.Album.Images, maxWidth); url != "" {
+				out[string(ft.ID)] = url
+			}
+		}
+	}
+	return out, nil
+}
+
 // isCatalogStub reports whether a track is a metadata-less placeholder — Spotify
 // sometimes returns a non-nil track for a playlist slot whose underlying item has
 // been removed from the catalog, with an empty name and no artists. These carry
