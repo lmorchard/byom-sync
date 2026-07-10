@@ -58,6 +58,7 @@ type Track struct {
 	DurationMS int       `yaml:"duration_ms,omitempty"`
 	YouTubeID  string    `yaml:"youtube_id,omitempty"`
 	AddedAt    string    `yaml:"added_at,omitempty"`
+	Image      string    `yaml:"image,omitempty"`
 	SyncState  SyncState `yaml:"sync_state"`
 }
 
