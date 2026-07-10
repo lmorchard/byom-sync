@@ -69,10 +69,6 @@ func (d *DB) GetEnrich(key string) (EnrichEntry, bool) {
 
 // PutEnrich upserts an enrichment entry.
 func (d *DB) PutEnrich(key string, e EnrichEntry) error {
-	var checked sql.NullString
-	if !e.CheckedAt.IsZero() {
-		checked = sql.NullString{String: e.CheckedAt.UTC().Format(time.RFC3339), Valid: true}
-	}
 	_, err := d.db.Exec(
 		`INSERT INTO enrichment_cache (key, spotify_id, isrc, spotify_url, album, title, artist, image, duration_ms, checked_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -80,7 +76,8 @@ func (d *DB) PutEnrich(key string, e EnrichEntry) error {
 		   spotify_id=excluded.spotify_id, isrc=excluded.isrc, spotify_url=excluded.spotify_url,
 		   album=excluded.album, title=excluded.title, artist=excluded.artist, image=excluded.image,
 		   duration_ms=excluded.duration_ms, checked_at=excluded.checked_at`,
-		key, e.SpotifyID, e.ISRC, e.SpotifyURL, e.Album, e.Title, e.Artist, e.Image, e.DurationMS, checked,
+		key, e.SpotifyID, e.ISRC, e.SpotifyURL, e.Album, e.Title, e.Artist, e.Image, e.DurationMS,
+		e.CheckedAt.UTC().Format(time.RFC3339),
 	)
 	return err
 }

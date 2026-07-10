@@ -24,6 +24,21 @@ func TestEnrichPutGetPositive(t *testing.T) {
 	}
 }
 
+func TestEnrichPutZeroCheckedAt(t *testing.T) {
+	db := openTemp(t)
+	in := EnrichEntry{SpotifyID: ""}
+	if err := db.PutEnrich("miss", in); err != nil {
+		t.Fatalf("PutEnrich: %v", err)
+	}
+	got, ok := db.GetEnrich("miss")
+	if !ok {
+		t.Fatal("GetEnrich: want ok")
+	}
+	if !got.CheckedAt.IsZero() {
+		t.Fatalf("CheckedAt: want zero, got %v", got.CheckedAt)
+	}
+}
+
 func TestEnrichGetMissingIsFalse(t *testing.T) {
 	db := openTemp(t)
 	if _, ok := db.GetEnrich("nope"); ok {
