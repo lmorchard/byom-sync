@@ -80,6 +80,9 @@ func initConfig() {
 	viper.SetDefault("dir", "./playlists")
 	viper.SetDefault("youtube_api_key", "")
 	viper.SetDefault("ytdlp_path", "yt-dlp")
+	viper.SetDefault("cache_path", "")          // empty → defaultCachePath()
+	viper.SetDefault("cache_miss_ttl", "720h")  // 30d negative-result TTL
+	viper.SetDefault("cache_embed_ttl", "720h") // 30d embeddability TTL
 
 	// Read in environment variables that match
 	viper.AutomaticEnv()

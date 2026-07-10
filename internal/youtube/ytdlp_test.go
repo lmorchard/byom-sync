@@ -52,6 +52,17 @@ func TestYtdlpPicksFirstEmbeddableCandidate(t *testing.T) {
 	}
 }
 
+func TestYtdlpResolveMarksEmbeddable(t *testing.T) {
+	s := &ytdlpStub{searchOut: "id1\nid2\n", embed: map[string]string{"id1": "True"}}
+	res, err := YtdlpResolver{run: s.run}.Resolve(context.Background(), trackAT())
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if res.Embeddable == nil || !*res.Embeddable {
+		t.Fatalf("Embeddable: want non-nil true, got %v", res.Embeddable)
+	}
+}
+
 func TestYtdlpUsesTopWhenEmbeddable(t *testing.T) {
 	s := &ytdlpStub{searchOut: "id1\nid2\n", embed: map[string]string{"id1": "True"}}
 	res, err := YtdlpResolver{run: s.run}.Resolve(context.Background(), trackAT())

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lmorchard/byom-sync/internal/playlist"
+	"github.com/lmorchard/byom-sync/internal/rcache"
 	"github.com/lmorchard/byom-sync/internal/youtube"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -20,7 +21,34 @@ var (
 	resolveDelay     time.Duration
 	resolveFlush     int
 	resolveReresolve bool
+	resolveNoCache   bool
 )
+
+// defaultCachePath mirrors the auth config-dir logic: $XDG_CONFIG_HOME/byom-sync
+// (or ~/.config/byom-sync), file cache.db.
+func defaultCachePath() string {
+	var base string
+	if v := os.Getenv("XDG_CONFIG_HOME"); v != "" {
+		base = filepath.Join(v, "byom-sync")
+	} else if home, err := os.UserHomeDir(); err == nil {
+		base = filepath.Join(home, ".config", "byom-sync")
+	} else {
+		base = "byom-sync"
+	}
+	return filepath.Join(base, "cache.db")
+}
+
+// openCache opens the resolution cache unless --no-cache is set (then nil, nil).
+func openCache() (*rcache.DB, error) {
+	if resolveNoCache {
+		return nil, nil
+	}
+	path := viper.GetString("cache_path")
+	if path == "" {
+		path = defaultCachePath()
+	}
+	return rcache.Open(path)
+}
 
 var resolveCmd = &cobra.Command{
 	Use:   "resolve",
@@ -87,6 +115,16 @@ func runResolveYouTube(ctx context.Context) error {
 	chain.OnDisable = func(name string, err error) {
 		log.Warnf("resolver %q exhausted (%v) — continuing without it", name, err)
 	}
+
+	cache, err := openCache()
+	if err != nil {
+		return fmt.Errorf("open cache: %w", err)
+	}
+	if cache != nil {
+		defer func() { _ = cache.Close() }()
+	}
+	missTTL := viper.GetDuration("cache_miss_ttl")
+	embedTTL := viper.GetDuration("cache_embed_ttl")
 
 	var budget *int
 	if resolveLimit > 0 {
@@ -158,14 +196,22 @@ func runResolveYouTube(ctx context.Context) error {
 			return nil
 		}
 
-		n, stop, err := youtube.Resolve(ctx, chain, &p, youtube.ResolveOptions{
+		opts := youtube.ResolveOptions{
 			Budget:     budget,
 			Pace:       resolveDelay,
 			Report:     report,
 			OnResolved: onResolved,
 			Reresolve:  resolveReresolve,
 			Verify:     ytdlp.IsEmbeddable,
-		})
+			MissTTL:    missTTL,
+			EmbedTTL:   embedTTL,
+		}
+		// Assign only when non-nil: a typed-nil *rcache.DB in the interface field
+		// would read as non-nil and Resolve would call methods on a nil DB.
+		if cache != nil {
+			opts.Cache = cache
+		}
+		n, stop, err := youtube.Resolve(ctx, chain, &p, opts)
 		// Flush any resolutions since the last batched save (also covers an early
 		// stop). Do this before surfacing a resolve error so partial progress sticks.
 		if sinceSave > 0 {
@@ -201,6 +247,133 @@ func runResolveYouTube(ctx context.Context) error {
 	}
 	log.Warnf("YouTube resolve done: %d ids resolved; stopped: %s", total, stopped)
 	return nil
+}
+
+var (
+	primeInput            string
+	primeAssumeEmbeddable bool
+)
+
+var resolvePrimeCmd = &cobra.Command{
+	Use:   "prime",
+	Short: "Seed the resolution cache from tracks that already have a youtube_id",
+	Long: `Walk the hub and upsert every track that already has a youtube_id into the
+resolution cache, so subsequent resolve runs reuse that work instead of hitting
+the network. Positive entries only — misses can't be reconstructed from the YAML.
+
+--assume-embeddable (default true) marks seeded ids as embeddable, so --reresolve
+trusts them for the embed TTL window. Set --assume-embeddable=false to seed them
+unverified (the next --reresolve then checks each once). The default trusts the
+hub, which was resolved by the embeddable-preferring resolver; the tradeoff is
+that a video gone private/dead since resolution isn't caught until the TTL lapses
+or you clear the cache.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if resolveNoCache {
+			return fmt.Errorf("--no-cache is incompatible with prime")
+		}
+		input := primeInput
+		if input == "" {
+			input = viper.GetString("dir")
+		}
+		paths, err := hubPaths(input)
+		if err != nil {
+			return err
+		}
+		db, err := openCache()
+		if err != nil {
+			return fmt.Errorf("open cache: %w", err)
+		}
+		defer func() { _ = db.Close() }()
+		seeded, dupes, err := primeCache(paths, db, primeAssumeEmbeddable, time.Now())
+		if err != nil {
+			return err
+		}
+		log.Infof("primed cache: %d keys seeded, %d cross-playlist duplicates collapsed (assume-embeddable=%v)", seeded, dupes, primeAssumeEmbeddable)
+		return nil
+	},
+}
+
+var clearMissesOnly bool
+
+var resolveCacheCmd = &cobra.Command{
+	Use:   "cache",
+	Short: "Inspect or clear the resolution cache",
+}
+
+var resolveCacheStatsCmd = &cobra.Command{
+	Use:   "stats",
+	Short: "Show resolution cache coverage",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		db, err := openCache()
+		if err != nil {
+			return fmt.Errorf("open cache: %w", err)
+		}
+		defer func() { _ = db.Close() }()
+		missTTL := viper.GetDuration("cache_miss_ttl")
+		s, err := db.Stats(time.Now().Add(-missTTL))
+		if err != nil {
+			return err
+		}
+		log.Infof("cache: %d entries — %d resolved, %d misses (%d expired, re-attempted next run)",
+			s.Total, s.Positive, s.Negative, s.ExpiredNegative)
+		return nil
+	},
+}
+
+var resolveCacheClearCmd = &cobra.Command{
+	Use:   "clear",
+	Short: "Delete cache entries (all, or --misses-only)",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		db, err := openCache()
+		if err != nil {
+			return fmt.Errorf("open cache: %w", err)
+		}
+		defer func() { _ = db.Close() }()
+		n, err := db.Clear(clearMissesOnly)
+		if err != nil {
+			return err
+		}
+		what := "entries"
+		if clearMissesOnly {
+			what = "miss entries"
+		}
+		log.Warnf("cleared %d %s from the resolution cache", n, what)
+		return nil
+	},
+}
+
+// primeCache seeds the cache from tracks that already have a youtube_id. It
+// returns how many keys were seeded and how many cross-playlist duplicates were
+// collapsed onto an already-seen key.
+func primeCache(paths []string, db *rcache.DB, assumeEmbeddable bool, now time.Time) (seeded, dupes int, err error) {
+	seen := map[string]bool{}
+	for _, path := range paths {
+		p, lerr := playlist.LoadFile(path)
+		if lerr != nil {
+			return seeded, dupes, fmt.Errorf("load %s: %w", path, lerr)
+		}
+		for _, t := range p.Tracks {
+			if t.YouTubeID == "" {
+				continue
+			}
+			key := t.Key()
+			if seen[key] {
+				dupes++
+			} else {
+				seen[key] = true
+				seeded++
+			}
+			e := rcache.Entry{VideoID: t.YouTubeID, Source: "prime", ResolvedAt: now, CheckedAt: now}
+			if assumeEmbeddable {
+				yes := true
+				e.Embeddable = &yes
+			}
+			if perr := db.Put(key, e); perr != nil {
+				return seeded, dupes, fmt.Errorf("cache put: %w", perr)
+			}
+		}
+	}
+	return seeded, dupes, nil
 }
 
 // countMissingYouTube counts tracks in p that still lack a YouTube id.
@@ -239,4 +412,14 @@ func init() {
 	resolveYouTubeCmd.Flags().DurationVar(&resolveDelay, "delay", 500*time.Millisecond, "pause between searches to stay under the API rate limit")
 	resolveYouTubeCmd.Flags().IntVar(&resolveFlush, "flush", 20, "write resolved ids to disk every N resolutions (granular resume)")
 	resolveYouTubeCmd.Flags().BoolVar(&resolveReresolve, "reresolve", false, "re-check tracks that already have a youtube_id and replace ones no longer embeddable")
+	resolveYouTubeCmd.Flags().BoolVar(&resolveNoCache, "no-cache", false, "bypass the resolution cache (pure network resolution)")
+
+	resolveCmd.AddCommand(resolvePrimeCmd)
+	resolvePrimeCmd.Flags().StringVar(&primeInput, "input", "", "hub YAML file or directory (default: config dir)")
+	resolvePrimeCmd.Flags().BoolVar(&primeAssumeEmbeddable, "assume-embeddable", true, "mark seeded ids as embeddable (skip re-verify within the embed TTL)")
+
+	resolveCmd.AddCommand(resolveCacheCmd)
+	resolveCacheCmd.AddCommand(resolveCacheStatsCmd)
+	resolveCacheCmd.AddCommand(resolveCacheClearCmd)
+	resolveCacheClearCmd.Flags().BoolVar(&clearMissesOnly, "misses-only", false, "clear only negative (miss) entries, keeping resolved ids")
 }
