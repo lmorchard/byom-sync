@@ -16,7 +16,6 @@ type ytdlpStub struct {
 	searchOut string
 	searchErr error
 	embed     map[string]string // videoId -> "True"/"False"
-	verifyErr error
 	searched  bool
 	verified  []string
 }
@@ -27,13 +26,13 @@ func (s *ytdlpStub) run(_ context.Context, _ string, args ...string) (string, er
 		s.searched = true
 		return s.searchOut, s.searchErr
 	}
-	if s.verifyErr != nil {
-		return "", s.verifyErr
-	}
 	url := args[len(args)-1]
 	id := strings.TrimPrefix(url, "https://www.youtube.com/watch?v=")
 	s.verified = append(s.verified, id)
 	v := s.embed[id]
+	if v == "ERR" { // e.g. age-gated: yt-dlp exits non-zero on verify
+		return "", errors.New("Sign in to confirm your age")
+	}
 	if v == "" {
 		v = "False"
 	}
@@ -91,11 +90,23 @@ func TestYtdlpSearchErrorPropagates(t *testing.T) {
 	}
 }
 
-func TestYtdlpVerifyErrorPropagates(t *testing.T) {
-	s := &ytdlpStub{searchOut: "id1\n", verifyErr: errors.New("net")}
-	_, err := YtdlpResolver{run: s.run}.Resolve(context.Background(), trackAT())
-	if err == nil {
-		t.Error("verify error should propagate")
+func TestYtdlpSkipsUnverifiableCandidate(t *testing.T) {
+	// id1 fails to verify (e.g. age-gated); id2 is embeddable — use id2.
+	s := &ytdlpStub{searchOut: "id1\nid2\n", embed: map[string]string{"id1": "ERR", "id2": "True"}}
+	res, err := YtdlpResolver{run: s.run}.Resolve(context.Background(), trackAT())
+	if err != nil || res.VideoID != "id2" {
+		t.Fatalf("res=%+v err=%v, want id2 (id1 skipped)", res, err)
+	}
+	if strings.Join(s.verified, ",") != "id1,id2" {
+		t.Errorf("verified=%v, want [id1 id2]", s.verified)
+	}
+}
+
+func TestYtdlpAllUnverifiableIsMiss(t *testing.T) {
+	s := &ytdlpStub{searchOut: "id1\nid2\n", embed: map[string]string{"id1": "ERR", "id2": "ERR"}}
+	res, err := YtdlpResolver{run: s.run}.Resolve(context.Background(), trackAT())
+	if err != nil || res.VideoID != "" {
+		t.Errorf("want clean miss (no track error), got res=%+v err=%v", res, err)
 	}
 }
 
