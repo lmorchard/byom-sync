@@ -1,6 +1,8 @@
 package export
 
 import (
+	"crypto/sha1"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 
@@ -8,8 +10,9 @@ import (
 )
 
 // JSPFExporter marshals a playlist into a JSPF (JSON) document suitable for web
-// components. Track identifiers use the "urn:isrc:<isrc>" form; durations are
-// emitted in seconds per the JSPF spec.
+// components. Track identifiers use the "urn:isrc:<isrc>" form when an ISRC is
+// known, else a synthesized "urn:byom:<hash>" so every track is addressable;
+// durations are emitted in seconds per the JSPF spec.
 type JSPFExporter struct{}
 
 type jspfDoc struct {
@@ -71,6 +74,8 @@ func (JSPFExporter) Export(p playlist.Playlist, outputPath string, _ map[string]
 		}
 		if t.ISRC != "" {
 			jt.Identifier = []string{"urn:isrc:" + t.ISRC}
+		} else {
+			jt.Identifier = []string{"urn:byom:" + byomID(t)}
 		}
 		if t.SpotifyURL != "" {
 			jt.Location = []string{t.SpotifyURL}
@@ -100,4 +105,12 @@ func (JSPFExporter) Export(p playlist.Playlist, outputPath string, _ map[string]
 		return err
 	}
 	return os.WriteFile(outputPath, append(data, '\n'), 0o644)
+}
+
+// byomID is a stable hash of a track's normalized artist+title+album, used as
+// the "urn:byom:<hash>" identifier for tracks without an ISRC so they remain
+// addressable (e.g. by byom-player). Not cryptographic — just a content id.
+func byomID(t playlist.Track) string {
+	sum := sha1.Sum([]byte(t.ContentKey()))
+	return hex.EncodeToString(sum[:])
 }

@@ -329,7 +329,7 @@ func runResolveSpotify(ctx context.Context) error {
 		}
 		log.Infof("%s: %d of %d tracks need enrichment", base, need, len(p.Tracks))
 
-		var got, ambiguous, missed int
+		var got, ambiguous, missed, skipped int
 		report := func(e spotifyenrich.Event) {
 			switch e.Kind {
 			case spotifyenrich.KindEnriched:
@@ -344,6 +344,9 @@ func runResolveSpotify(ctx context.Context) error {
 			case spotifyenrich.KindMiss:
 				missed++
 				log.Debugf("  no match: %s - %s", e.Artist, e.Title)
+			case spotifyenrich.KindSkipped:
+				skipped++
+				log.Debugf("  skipped: %s - %s (spotify: false)", e.Artist, e.Title)
 			case spotifyenrich.KindError:
 				log.Warnf("  error: %s - %s: %v", e.Artist, e.Title, e.Err)
 			}
@@ -378,7 +381,7 @@ func runResolveSpotify(ctx context.Context) error {
 		if eerr != nil {
 			return fmt.Errorf("enrich %s: %w", path, eerr)
 		}
-		log.Infof("%s: %d enriched, %d ambiguous (candidates written), %d no-match", base, got, ambiguous, missed)
+		log.Infof("%s: %d enriched, %d ambiguous (candidates written), %d no-match, %d skipped (spotify:false)", base, got, ambiguous, missed, skipped)
 		total += n
 		if budget != nil && *budget <= 0 {
 			log.Warnf("enrichment limit reached — stopping (progress saved)")
@@ -389,12 +392,20 @@ func runResolveSpotify(ctx context.Context) error {
 	return nil
 }
 
-// countNeedingEnrich counts tracks that are unresolved or have a pending pick.
+// countNeedingEnrich counts tracks that require an enrichment pass: any track
+// still carrying enrich_candidates (a pending pick, or stale candidates to clear
+// on a now-opted-out track), plus unresolved tracks not opted out with
+// spotify:false. Tracks with a spotify_id and no candidates, and opted-out tracks
+// with no candidates, need nothing.
 func countNeedingEnrich(p playlist.Playlist) int {
 	n := 0
 	for _, t := range p.Tracks {
-		if t.SpotifyID == "" || len(t.EnrichCandidates) > 0 {
-			n++
+		optedOut := t.Spotify != nil && !*t.Spotify
+		switch {
+		case len(t.EnrichCandidates) > 0:
+			n++ // a pick to apply, or stale candidates to clear
+		case !optedOut && t.SpotifyID == "":
+			n++ // unresolved and not opted out
 		}
 	}
 	return n
