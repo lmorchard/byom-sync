@@ -57,6 +57,10 @@ func Open(path string) (*DB, error) {
 		_ = db.Close()
 		return nil, err
 	}
+	if _, err := db.Exec(enrichSchema); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
 	return &DB{db: db}, nil
 }
 
@@ -145,16 +149,31 @@ func (d *DB) Stats(missCutoff time.Time) (Stats, error) {
 	return s, nil
 }
 
-// Clear deletes cache rows. When missesOnly is true, only negative entries are
-// removed. Returns the number of rows deleted.
+// Clear deletes cache entries across both the resolution and enrichment tables.
+// With missesOnly, only negative entries (empty id) are removed. Returns the
+// total number of rows deleted.
 func (d *DB) Clear(missesOnly bool) (int64, error) {
-	q := `DELETE FROM resolution_cache`
-	if missesOnly {
-		q += ` WHERE video_id = ''`
+	var total int64
+	del := func(table, idCol string) (int64, error) {
+		q := "DELETE FROM " + table
+		if missesOnly {
+			q += " WHERE " + idCol + " = ''"
+		}
+		res, err := d.db.Exec(q)
+		if err != nil {
+			return 0, err
+		}
+		return res.RowsAffected()
 	}
-	res, err := d.db.Exec(q)
+	n1, err := del("resolution_cache", "video_id")
 	if err != nil {
-		return 0, err
+		return total, err
 	}
-	return res.RowsAffected()
+	total += n1
+	n2, err := del("enrichment_cache", "spotify_id")
+	if err != nil {
+		return total, err
+	}
+	total += n2
+	return total, nil
 }
