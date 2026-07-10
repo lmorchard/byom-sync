@@ -24,6 +24,6 @@
 {{end}}
 
 {{define "player"}}
-<byom-player provider="{{.Site.Provider}}"{{if .Site.Providers}} providers="{{providersCSV .Site.Providers}}"{{end}}{{if .Site.YouTubeSearchEndpoint}} youtube-search-endpoint="{{.Site.YouTubeSearchEndpoint}}"{{end}}{{if .Site.SpotifyClientID}} spotify-client-id="{{.Site.SpotifyClientID}}"{{end}} src="playlist.jspf.json"></byom-player>
+<byom-player provider="{{.Site.Provider}}"{{if .Site.Providers}} providers="{{providersCSV .Site.Providers}}"{{end}}{{if .Site.YouTubeSearchEndpoint}} youtube-search-endpoint="{{.Site.YouTubeSearchEndpoint}}"{{end}}{{if .Site.SpotifyClientID}} spotify-client-id="{{.Site.SpotifyClientID}}"{{end}} src="{{.JSPFHref}}"></byom-player>
 <script type="module" src="{{.Site.PlayerSrc}}"></script>
 {{end}}

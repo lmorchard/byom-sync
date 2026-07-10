@@ -40,7 +40,7 @@ func TestRenderSite(t *testing.T) {
 		t.Error("landing missing intro or tree link")
 	}
 	pl := read("synthpop/bleep-bloop-bop/index.html")
-	if !strings.Contains(pl, `<byom-player`) || !strings.Contains(pl, `src="playlist.jspf.json"`) {
+	if !strings.Contains(pl, `<byom-player`) || !strings.Contains(pl, `src="/synthpop/bleep-bloop-bop/playlist.jspf.json"`) {
 		t.Error("playlist page missing player tag")
 	}
 	if !strings.Contains(pl, `provider="youtube"`) || !strings.Contains(pl, `providers="youtube,spotify"`) {
@@ -58,6 +58,9 @@ func TestRenderSite(t *testing.T) {
 	embed := read("synthpop/bleep-bloop-bop/embed/index.html")
 	if !strings.Contains(embed, "<byom-player") || strings.Contains(embed, "<byom-site-nav>") {
 		t.Error("embed should have player but no site nav")
+	}
+	if !strings.Contains(embed, `src="/synthpop/bleep-bloop-bop/playlist.jspf.json"`) {
+		t.Error("embed player must point at the root-relative JSPF path, not a relative one")
 	}
 	folder := read("synthpop/index.html")
 	if !strings.Contains(folder, "Synthpop picks") {

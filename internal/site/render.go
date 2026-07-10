@@ -53,6 +53,7 @@ type folderData struct {
 type playlistData struct {
 	pageData
 	Playlist *playlist.Playlist
+	JSPFHref string
 }
 
 // Renderer holds the parsed template set and site settings.
@@ -163,7 +164,7 @@ func (r *Renderer) renderPlaylist(outDir string, node *Node, crumbs []Crumb) err
 		Canonical: canonical(r.Site.BaseURL, node.Path),
 		Crumbs:    crumbs,
 	}
-	data := playlistData{pageData: base, Playlist: node.Playlist}
+	data := playlistData{pageData: base, Playlist: node.Playlist, JSPFHref: "/" + node.Path + "/playlist.jspf.json"}
 	if err := r.write(filepath.Join(dir, "index.html"), "playlist.html", data); err != nil {
 		return err
 	}

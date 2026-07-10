@@ -15,10 +15,12 @@ class ByomSiteNav extends HTMLElement {
   render(nodes, here) {
     return `<ul>${nodes.map((n) => {
       const active = n.path === here ? ' aria-current="page"' : '';
-      const label = (n.isDir ? '📁 ' : '') + n.title;
+      const label = (n.isDir ? '📁 ' : '') + esc(n.title);
       const kids = n.children && n.children.length ? this.render(n.children, here) : '';
-      return `<li><a href="${n.path}"${active}>${label}</a>${kids}</li>`;
+      return `<li><a href="${esc(n.path)}"${active}>${label}</a>${kids}</li>`;
     }).join('')}</ul>`;
   }
 }
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
 customElements.define('byom-site-nav', ByomSiteNav);
