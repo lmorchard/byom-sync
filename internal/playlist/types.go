@@ -49,16 +49,16 @@ func (p Playlist) IsNative() bool {
 
 // Track is a single entry in a playlist.
 type Track struct {
-	Title      string    `yaml:"title"`
-	Artist     string    `yaml:"artist"`
-	Album      string    `yaml:"album,omitempty"`
-	ISRC       string    `yaml:"isrc,omitempty"`
-	SpotifyID  string    `yaml:"spotify_id,omitempty"`
-	SpotifyURL string    `yaml:"spotify_url,omitempty"`
-	DurationMS int       `yaml:"duration_ms,omitempty"`
-	YouTubeID  string    `yaml:"youtube_id,omitempty"`
-	Image      string    `yaml:"image,omitempty"`
-	AddedAt    string    `yaml:"added_at,omitempty"`
+	Title      string `yaml:"title"`
+	Artist     string `yaml:"artist"`
+	Album      string `yaml:"album,omitempty"`
+	ISRC       string `yaml:"isrc,omitempty"`
+	SpotifyID  string `yaml:"spotify_id,omitempty"`
+	SpotifyURL string `yaml:"spotify_url,omitempty"`
+	DurationMS int    `yaml:"duration_ms,omitempty"`
+	YouTubeID  string `yaml:"youtube_id,omitempty"`
+	Image      string `yaml:"image,omitempty"`
+	AddedAt    string `yaml:"added_at,omitempty"`
 	// Spotify is a tri-state opt-out for enrichment. nil (field absent) or true
 	// means "enrich normally"; false ("spotify: false") asserts the track has no
 	// Spotify equivalent, so `resolve spotify` skips it. A pointer so an explicit

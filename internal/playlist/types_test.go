@@ -120,8 +120,8 @@ func TestTrack_SpotifyMarkerRoundTrip(t *testing.T) {
 		present bool
 	}{
 		"unset omits field": {in: Track{Title: "T", Artist: "A"}, wantYML: "spotify:", present: false},
-		"false serializes":   {in: Track{Title: "T", Artist: "A", Spotify: &no}, wantYML: "spotify: false", present: true},
-		"true serializes":    {in: Track{Title: "T", Artist: "A", Spotify: &yes}, wantYML: "spotify: true", present: true},
+		"false serializes":  {in: Track{Title: "T", Artist: "A", Spotify: &no}, wantYML: "spotify: false", present: true},
+		"true serializes":   {in: Track{Title: "T", Artist: "A", Spotify: &yes}, wantYML: "spotify: true", present: true},
 	}
 	for name, tc := range cases {
 		data, err := yaml.Marshal(tc.in)
