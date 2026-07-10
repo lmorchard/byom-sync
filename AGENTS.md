@@ -70,6 +70,14 @@ errcheck findings CI caught).
   `date_orphaned`); `mirror` overwrites. Playlist selection: config `playlists`
   by default, positional args override, `--all` = all owned. Catalog-removed
   stubs (empty title+artist) are filtered at fetch.
+- **Native playlists:** a hub file with no `spotify_id` is a hand-authored
+  ("native") playlist — just `title`/`creator`/`tracks`, where each track needs
+  only `title` and `artist` (`album` optional). Provenance is *derived*, never
+  stored: use `playlist.Playlist.Source()` / `IsNative()` (source `native` when
+  no source ID is set), not ad-hoc `spotify_id == ""` checks — this is the single
+  extension point for future ingestion sources. `sync` never touches native files
+  (it matches by `spotify_id`; slug collisions get a `-<id>` suffix). Spotify-only
+  behavior (orphan/`sync_state` emission) is gated on `Source()`.
 - **Exporters:** m3u8 builds `{prefix}/{Artist}/{Album}/{Title}.{ext}` paths
   verbatim; jspf uses `urn:isrc:` identifiers + `location` (spotify_url); markdown
   is frontmatter + tracklist table via the embedded, init-overridable template.
