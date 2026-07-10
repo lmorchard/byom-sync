@@ -57,6 +57,24 @@ func TestPlaylist_YAMLRoundTrip(t *testing.T) {
 	}
 }
 
+func TestPlaylist_Source(t *testing.T) {
+	spotify := Playlist{SpotifyID: "37i9dQZF1DXcBWIGoYBM5M", Title: "Synced"}
+	if got := spotify.Source(); got != SourceSpotify {
+		t.Errorf("Source() with spotify_id: got %q want %q", got, SourceSpotify)
+	}
+	if spotify.IsNative() {
+		t.Error("IsNative() with spotify_id: got true want false")
+	}
+
+	native := Playlist{Title: "Hand Authored"}
+	if got := native.Source(); got != SourceNative {
+		t.Errorf("Source() without spotify_id: got %q want %q", got, SourceNative)
+	}
+	if !native.IsNative() {
+		t.Error("IsNative() without spotify_id: got false want true")
+	}
+}
+
 func TestTrack_Key(t *testing.T) {
 	withISRC := Track{Title: "T", Artist: "A", ISRC: "GBX123"}
 	if got := withISRC.Key(); got != "isrc:GBX123" {
