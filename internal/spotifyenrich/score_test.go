@@ -55,3 +55,19 @@ func TestSim(t *testing.T) {
 		t.Errorf("kitten/sitting ratio out of expected band: got %v", got)
 	}
 }
+
+func TestSim_ShortTokenNoOverMatch(t *testing.T) {
+	// a short pattern ("go") is a trivial substring of many longer strings;
+	// containment must not fire for it, or wrong tracks auto-accept.
+	if got := sim("go", "going home"); got >= 0.5 {
+		t.Errorf("short pattern should not over-match via containment: got %v", got)
+	}
+}
+
+func TestScore_ShortTokenWrongTrackRejected(t *testing.T) {
+	tr := playlist.Track{Title: "Go", Artist: "Cat"}
+	c := Candidate{Title: "Going Home", Artist: "Cat Stevens"}
+	if s := Score(tr, c); s >= DefaultThreshold {
+		t.Errorf("short-token mismatch should stay below threshold, got %v", s)
+	}
+}
