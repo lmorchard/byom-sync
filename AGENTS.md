@@ -90,9 +90,3 @@ pinned to Node-24 versions (checkout@v7, setup-go@v6, action-gh-release@v3).
 - Verify before claiming done: run `make lint && make test && make build` and
   read the output. For live Spotify behavior, a real Premium account + registered
   app is needed (that's manual).
-
-## Open issues
-
-- **#5** — emit `sync_state` in a JSPF track `extension` (namespace
-  `https://github.com/lmorchard/byom-sync`) so byom-player can show orphaned
-  tracks end-to-end. Small change in `internal/export/jspf.go`.
