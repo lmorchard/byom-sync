@@ -92,7 +92,8 @@ errcheck findings CI caught).
   `enrich_candidates` — accept one by copying its `spotify_id` up to the track's
   own `spotify_id` and re-running. Recommended pipeline order:
   author/`sync` → `resolve spotify` → `resolve youtube` → `export`, so YouTube
-  resolution and its cache key on the enriched ISRC (`Track.Key()` is ISRC-first).
+  resolution and its cache are keyed on the enriched ISRC (`Track.Key()` is
+  ISRC-first).
 - **Exporters:** m3u8 builds `{prefix}/{Artist}/{Album}/{Title}.{ext}` paths
   verbatim; jspf uses `urn:isrc:` identifiers + `location` (spotify_url); markdown
   is frontmatter + tracklist table via the embedded, init-overridable template.
