@@ -24,7 +24,7 @@ YouTube resolution cache in `internal/rcache/` — an index, not a source of tru
 
 - `cmd/` — Cobra commands: `root`, `version`, `init`, `auth`, `sync`, `import`,
   `export`, `resolve` (subcommands `youtube`, `prime`, `cache stats`,
-  `cache clear`).
+  `cache clear`), `site`.
 - `internal/playlist/` — the hub: `types.go` (`Playlist`/`Track`/`SyncState`,
   `Track.Key()`), `store.go` (`Load`/`LoadFile`/`FindFileByID`/`Save`/`Slug`),
   `merge.go` (`Merge`, `Archive`/`Mirror`).
@@ -41,6 +41,10 @@ YouTube resolution cache in `internal/rcache/` — an index, not a source of tru
   `Stats`/`Clear`. Keyed by `Track.Key()`; DB at `$XDG_CONFIG_HOME/byom-sync/cache.db`
   (gitignored, disposable — `resolve prime` rebuilds positives from the hub).
 - `internal/config/`, `internal/templates/` (embedded Markdown template).
+- `internal/site/` — the static site generator (`byom-sync site`): recursive
+  hub walk → per-playlist JSPF + HTML pages embedding `<byom-player>`,
+  `site-index.json` + `<byom-site-nav>`, OG metadata, RSS. Reuses
+  `export.JSPFExporter`.
 
 ## Commands (Makefile-first)
 

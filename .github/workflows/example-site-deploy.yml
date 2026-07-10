@@ -1,0 +1,31 @@
+# Example workflow for a CONTENT repo (your playlist hub) — not byom-sync itself.
+# Copy into your hub repo, adjust paths, and enable GitHub Pages (source: Actions).
+name: Deploy mixtapes site
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+      - name: Install byom-sync
+        run: go install github.com/lmorchard/byom-sync@latest
+      - name: Build site
+        run: byom-sync site --input ./playlists --out ./dist --base-url https://mixtapes.lmorchard.com
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist
+      - id: deploy
+        uses: actions/deploy-pages@v4
