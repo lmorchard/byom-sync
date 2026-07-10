@@ -10,23 +10,22 @@ import (
 	"github.com/lmorchard/byom-sync/internal/playlist"
 )
 
-// mbAndCaaServer returns an httptest server standing in for both MusicBrainz and
-// the Cover Art Archive, routed by path. It records the User-Agent seen.
-func testServer(t *testing.T, handler http.HandlerFunc) (*httptest.Server, func() string) {
+// testServer returns an httptest server standing in for both MusicBrainz and
+// the Cover Art Archive, routed by path.
+func testServer(t *testing.T, handler http.HandlerFunc) *httptest.Server {
 	t.Helper()
-	var lastUA string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		lastUA = r.Header.Get("User-Agent")
-		handler(w, r)
-	}))
+	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
-	return srv, func() string { return lastUA }
+	return srv
 }
 
 func TestResolver_AlbumPath(t *testing.T) {
-	srv, ua := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+	srv := testServer(t, func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.HasPrefix(r.URL.Path, "/ws/2/release-group"):
+			if ua := r.Header.Get("User-Agent"); ua != "test-agent" {
+				t.Errorf("User-Agent not sent to MusicBrainz: %q", ua)
+			}
 			q := r.URL.Query().Get("query")
 			if !strings.Contains(q, `releasegroup:"Abbey Road"`) || !strings.Contains(q, `artist:"The Beatles"`) {
 				t.Errorf("unexpected release-group query: %q", q)
@@ -52,13 +51,10 @@ func TestResolver_AlbumPath(t *testing.T) {
 	if res.Source != "musicbrainz-release-group" {
 		t.Errorf("source: %q", res.Source)
 	}
-	if ua() != "test-agent" {
-		t.Errorf("User-Agent not sent: %q", ua())
-	}
 }
 
 func TestResolver_RecordingFallbackWhenNoAlbum(t *testing.T) {
-	srv, _ := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+	srv := testServer(t, func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.HasPrefix(r.URL.Path, "/ws/2/recording"):
 			_, _ = w.Write([]byte(`{"recordings":[{"id":"rec1","releases":[{"id":"rel-mbid-1"}]}]}`))
@@ -85,7 +81,7 @@ func TestResolver_RecordingFallbackWhenNoAlbum(t *testing.T) {
 }
 
 func TestResolver_MissWhenCAA404(t *testing.T) {
-	srv, _ := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+	srv := testServer(t, func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/ws/2/release-group") {
 			_, _ = w.Write([]byte(`{"release-groups":[{"id":"rg"}]}`))
 			return

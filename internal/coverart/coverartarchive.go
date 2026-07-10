@@ -11,10 +11,6 @@ import (
 type CAAClient struct {
 	HTTP    *http.Client
 	BaseURL string // e.g. CAABaseURL; overridable for tests
-	// UserAgent, when set, is sent on every request. The Cover Art Archive
-	// doesn't require one the way MusicBrainz does, but Resolver keeps this in
-	// sync with MBClient.UserAgent so both API calls present the same identity.
-	UserAgent string
 }
 
 // FrontImage returns the URL of the front cover for a MusicBrainz entity
@@ -28,9 +24,6 @@ func (c *CAAClient) FrontImage(ctx context.Context, entity, mbid string) (string
 		return "", err
 	}
 	req.Header.Set("Accept", "application/json")
-	if c.UserAgent != "" {
-		req.Header.Set("User-Agent", c.UserAgent)
-	}
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
 		return "", err

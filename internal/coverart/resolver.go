@@ -28,12 +28,6 @@ type Resolver struct {
 // album), then falls back to the recording path (art from the recording's first
 // release). Returns an empty Result (nil error) when no art is found.
 func (r Resolver) Resolve(ctx context.Context, t playlist.Track) (Result, error) {
-	// Keep the Cover Art Archive request identified the same way as the
-	// MusicBrainz one, unless the caller already set a distinct CAA UserAgent.
-	if r.CAA.UserAgent == "" {
-		r.CAA.UserAgent = r.MB.UserAgent
-	}
-
 	if t.Album != "" {
 		mbid, err := r.MB.SearchReleaseGroup(ctx, t.Artist, t.Album)
 		if err != nil {
