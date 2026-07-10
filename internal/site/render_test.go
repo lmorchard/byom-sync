@@ -1,6 +1,7 @@
 package site
 
 import (
+	"html/template"
 	"os"
 	"path/filepath"
 	"strings"
@@ -94,5 +95,39 @@ func TestRenderSite(t *testing.T) {
 	folder := read("synthpop/index.html")
 	if !strings.Contains(folder, "Synthpop picks") {
 		t.Error("folder page missing README intro")
+	}
+}
+
+func TestRenderPages(t *testing.T) {
+	site := testSite()
+	site.Pages = []PageLink{{Title: "About", Href: "/about/"}}
+	r, err := NewRenderer(site)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := t.TempDir()
+	pages := []ContentPage{{
+		Slug: "about", Title: "About", Desc: "Who I am.",
+		Body: template.HTML("<p>Hello <strong>world</strong>.</p>"),
+	}}
+	if err := r.RenderPages(out, pages); err != nil {
+		t.Fatalf("RenderPages: %v", err)
+	}
+	b, err := os.ReadFile(filepath.Join(out, "about", "index.html"))
+	if err != nil {
+		t.Fatalf("about page: %v", err)
+	}
+	s := string(b)
+	if !strings.Contains(s, "<strong>world</strong>") {
+		t.Error("page body not rendered")
+	}
+	if !strings.Contains(s, `<nav class="page-nav">`) {
+		t.Error("page missing header nav")
+	}
+	if !strings.Contains(s, `property="og:title" content="About"`) {
+		t.Error("page missing OG title")
+	}
+	if !strings.Contains(s, `href="https://mix.test/about/"`) {
+		t.Error("page missing canonical URL")
 	}
 }
