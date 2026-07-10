@@ -78,6 +78,11 @@ dir: "./playlists"
 # Accepts raw IDs, spotify:playlist:<id> URIs, or open.spotify.com URLs.
 playlists:
   - "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M"
+
+# YouTube resolution cache (optional; see "Resolve YouTube IDs").
+# cache_path: ""          # default: $XDG_CONFIG_HOME/byom-sync/cache.db
+# cache_miss_ttl: "720h"  # re-attempt an unmatched track after this long
+# cache_embed_ttl: "720h" # re-verify a cached embeddable id after this long
 ```
 
 The OAuth token is cached separately at
@@ -143,6 +148,50 @@ byom-sync export markdown --input ./playlists --out ./content/playlists
 
 M3U8 track paths are built as `{lib-prefix}/{Artist}/{Album}/{Title}.{ext}` and
 emitted as-is; the files aren't checked against the filesystem.
+
+### Resolve YouTube IDs
+
+Fill in a `youtube_id` for hub tracks that lack one, so exporters (e.g. JSPF for
+[`byom-player`](https://github.com/lmorchard/byom-player)) can play them. Resolution
+uses [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) (required on `PATH`), preferring
+videos that allow embedded playback.
+
+```sh
+# Resolve missing ids across the hub (only missing tracks are attempted)
+byom-sync resolve youtube --input ./playlists
+
+# Re-check existing ids and replace any no longer embeddable
+byom-sync resolve youtube --reresolve
+
+# Cap network searches this run; pace them to stay under rate limits
+byom-sync resolve youtube --limit 100 --delay 500ms
+```
+
+#### Resolution cache
+
+Resolution is backed by an optional SQLite cache (an accelerator — the YAML hub
+stays the source of truth, and `youtube_id` is still written into the YAML). It's
+keyed by track identity (ISRC, else normalized artist+title), so a track resolved
+in one playlist is reused across every playlist and across runs — including after
+a wipe or re-export. It also caches misses (skipped until `cache_miss_ttl`
+expires) and embeddability verdicts (trusted by `--reresolve` until
+`cache_embed_ttl`). The DB lives at `$XDG_CONFIG_HOME/byom-sync/cache.db` and is
+disposable — delete it and it rebuilds.
+
+```sh
+# Seed the cache from ids already resolved in the hub (do this once, no network).
+# Defaults to trusting those ids as embeddable; pass --assume-embeddable=false to
+# have the next --reresolve verify each instead.
+byom-sync resolve prime
+
+# Inspect coverage / clear entries
+byom-sync resolve cache stats
+byom-sync resolve cache clear --misses-only   # re-attempt unmatched tracks
+byom-sync resolve cache clear                 # wipe everything
+
+# Bypass the cache for one run (pure network resolution)
+byom-sync resolve youtube --no-cache
+```
 
 ## The hub schema
 

@@ -16,12 +16,14 @@ web component that plays the exported JSPF.
 
 Go 1.25 · Cobra (CLI) · Viper (config) · logrus · `github.com/zmb3/spotify/v2`
 (+ `/v2/auth`) · `golang.org/x/oauth2` (PKCE) · `gopkg.in/yaml.v3` ·
-`golang.org/x/sync/errgroup`. No database (scaffolded from the `go-cli-builder`
-skill with `--no-database --templates`).
+`golang.org/x/sync/errgroup`. Scaffolded `--no-database` (the hub is files);
+the one exception is `modernc.org/sqlite` (pure-Go, no cgo) backing the optional
+YouTube resolution cache in `internal/rcache/` — an index, not a source of truth.
 
 ## Layout
 
-- `cmd/` — Cobra commands: `root`, `version`, `init`, `auth`, `sync`, `export`.
+- `cmd/` — Cobra commands: `root`, `version`, `init`, `auth`, `sync`, `export`,
+  `resolve` (subcommands `youtube`, `prime`, `cache stats`, `cache clear`).
 - `internal/playlist/` — the hub: `types.go` (`Playlist`/`Track`/`SyncState`,
   `Track.Key()`), `store.go` (`Load`/`LoadFile`/`FindFileByID`/`Save`/`Slug`),
   `merge.go` (`Merge`, `Archive`/`Mirror`).
@@ -31,6 +33,12 @@ skill with `--no-database --templates`).
   `convert`, `isCatalogStub`, `ListMyPlaylists`, `selectOwnedIDs`).
 - `internal/export/` — `export.go` (`Exporter` iface + `Run` dispatcher),
   `m3u8.go`, `jspf.go`, `markdown.go`.
+- `internal/youtube/` — resolver chain: `resolver.go` (`Resolver`/`Chain`/`Result`),
+  `ytdlp.go` (yt-dlp search + `IsEmbeddable`), `youtube.go` (Data API search),
+  `resolve.go` (`Resolve` loop, `ResolveOptions`, `Cache` interface, TTL logic).
+- `internal/rcache/` — SQLite resolution cache: `Entry`, `Open`/`Get`/`Put`/
+  `Stats`/`Clear`. Keyed by `Track.Key()`; DB at `$XDG_CONFIG_HOME/byom-sync/cache.db`
+  (gitignored, disposable — `resolve prime` rebuilds positives from the hub).
 - `internal/config/`, `internal/templates/` (embedded Markdown template).
 
 ## Commands (Makefile-first)
