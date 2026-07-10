@@ -72,6 +72,30 @@ func TestIsCatalogStub(t *testing.T) {
 	}
 }
 
+func TestPickImage(t *testing.T) {
+	imgs := []spotify.Image{{URL: "xl", Width: 1000}, {URL: "l", Width: 640}, {URL: "s", Width: 64}}
+	if got := PickImage(imgs, 640); got != "l" {
+		t.Errorf("largest<=640: got %q", got)
+	}
+	if got := PickImage([]spotify.Image{{URL: "xl", Width: 1000}}, 640); got != "xl" {
+		t.Errorf("fallback smallest-above-cap: got %q", got)
+	}
+	if got := PickImage(nil, 640); got != "" {
+		t.Errorf("empty: got %q", got)
+	}
+}
+
+func TestConvertCapturesImage(t *testing.T) {
+	item := spotify.PlaylistItem{Track: spotify.PlaylistItemTrack{Track: &spotify.FullTrack{
+		SimpleTrack: spotify.SimpleTrack{Name: "T", Artists: []spotify.SimpleArtist{{Name: "A"}}},
+		Album:       spotify.SimpleAlbum{Name: "Alb", Images: []spotify.Image{{URL: "cover", Width: 640}}},
+	}}}
+	got := convert(item)
+	if got.Image != "cover" {
+		t.Errorf("convert should capture album art: %q", got.Image)
+	}
+}
+
 func TestConvert(t *testing.T) {
 	ft := &spotify.FullTrack{}
 	ft.Name = "My Song"

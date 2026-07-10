@@ -8,11 +8,9 @@ import (
 
 	"github.com/lmorchard/byom-sync/internal/playlist"
 	"github.com/lmorchard/byom-sync/internal/rcache"
+	"github.com/lmorchard/byom-sync/internal/spotifyfetch"
 	"github.com/zmb3/spotify/v2"
 )
-
-// defaultImageMaxWidth is the preferred upper bound for album art width.
-const defaultImageMaxWidth = 640
 
 // Searcher looks up Spotify candidates for a track and fetches a specific track
 // by id (for the pick-by-editing flow). Abstracted for testability.
@@ -95,34 +93,9 @@ func toCandidate(ft spotify.FullTrack) Candidate {
 		Artist:     strings.Join(names, ", "),
 		Album:      ft.Album.Name,
 		SpotifyURL: ft.ExternalURLs["spotify"],
-		Image:      pickImage(ft.Album.Images, defaultImageMaxWidth),
+		Image:      spotifyfetch.PickImage(ft.Album.Images, spotifyfetch.DefaultImageMaxWidth),
 		DurationMS: int(ft.Duration),
 	}
-}
-
-// pickImage returns the URL of the largest image no wider than maxWidth; if none
-// qualify it returns the smallest available; empty when there are no images.
-func pickImage(images []spotify.Image, maxWidth int) string {
-	best := ""
-	bestW := -1
-	fallback := ""
-	fallbackW := 1 << 30
-	for _, img := range images {
-		w := int(img.Width)
-		if w <= maxWidth {
-			if w > bestW {
-				bestW = w
-				best = img.URL
-			}
-		} else if w < fallbackW {
-			fallbackW = w
-			fallback = img.URL
-		}
-	}
-	if best != "" {
-		return best
-	}
-	return fallback
 }
 
 // candidateToEntry converts a Candidate to a positive enrichment-cache entry.

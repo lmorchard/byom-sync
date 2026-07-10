@@ -133,6 +133,7 @@ func convert(item spotify.PlaylistItem) playlist.Track {
 		SpotifyID:  string(ft.ID),
 		SpotifyURL: ft.ExternalURLs["spotify"],
 		DurationMS: int(ft.Duration),
+		Image:      PickImage(ft.Album.Images, DefaultImageMaxWidth),
 		AddedAt:    item.AddedAt,
 		SyncState:  playlist.SyncState{SpotifyPresent: true},
 	}
@@ -144,4 +145,32 @@ func joinArtists(artists []spotify.SimpleArtist) string {
 		names = append(names, a.Name)
 	}
 	return strings.Join(names, ", ")
+}
+
+// DefaultImageMaxWidth is the preferred upper bound for album art width.
+const DefaultImageMaxWidth = 640
+
+// PickImage returns the URL of the largest album image no wider than maxWidth;
+// if none qualify it returns the smallest available; "" when there are none.
+func PickImage(images []spotify.Image, maxWidth int) string {
+	best := ""
+	bestW := -1
+	fallback := ""
+	fallbackW := 1 << 30
+	for _, img := range images {
+		w := int(img.Width)
+		if w <= maxWidth {
+			if w > bestW {
+				bestW = w
+				best = img.URL
+			}
+		} else if w < fallbackW {
+			fallbackW = w
+			fallback = img.URL
+		}
+	}
+	if best != "" {
+		return best
+	}
+	return fallback
 }
