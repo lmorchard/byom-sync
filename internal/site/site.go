@@ -4,9 +4,10 @@ import "os"
 
 // Options configures a site build.
 type Options struct {
-	HubDir string
-	OutDir string
-	Site   SiteMeta
+	HubDir   string
+	OutDir   string
+	PagesDir string
+	Site     SiteMeta
 }
 
 // Build compiles the hub at opts.HubDir into a static site at opts.OutDir.
@@ -18,6 +19,11 @@ func Build(opts Options) error {
 	if err != nil {
 		return err
 	}
+	pages, err := LoadPages(opts.PagesDir)
+	if err != nil {
+		return err
+	}
+	opts.Site.Pages = pageLinks(pages)
 	r, err := NewRenderer(opts.Site)
 	if err != nil {
 		return err
@@ -29,6 +35,9 @@ func Build(opts Options) error {
 		return err
 	}
 	if err := r.RenderSite(opts.OutDir, root); err != nil {
+		return err
+	}
+	if err := r.RenderPages(opts.OutDir, pages); err != nil {
 		return err
 	}
 	if err := WriteAssets(opts.OutDir); err != nil {
