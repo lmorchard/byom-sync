@@ -613,6 +613,12 @@ var resolveCacheStatsCmd = &cobra.Command{
 		}
 		log.Infof("enrichment cache: %d entries — %d resolved, %d misses (%d expired)",
 			es.Total, es.Positive, es.Negative, es.ExpiredNegative)
+		as, err := db.ArtStats(time.Now().Add(-missTTL))
+		if err != nil {
+			return err
+		}
+		log.Infof("art cache: %d entries — %d found, %d misses (%d expired)",
+			as.Total, as.Positive, as.Negative, as.ExpiredNegative)
 		return nil
 	},
 }
