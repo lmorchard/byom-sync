@@ -9,7 +9,7 @@ import (
 
 func testSite() SiteMeta {
 	return SiteMeta{
-		Title: "mixtapes", BaseURL: "https://mix.test",
+		Title: "Test Tapes", BaseURL: "https://mix.test",
 		PlayerSrc: "https://cdn.example/byom-player.js",
 		Provider:  "youtube", Providers: []string{"youtube", "spotify"},
 	}
@@ -48,6 +48,9 @@ func TestRenderSite(t *testing.T) {
 	}
 	if !strings.Contains(pl, `<byom-site-nav>`) {
 		t.Error("playlist page missing nav component")
+	}
+	if !strings.Contains(pl, `>Test Tapes</a>`) {
+		t.Error("playlist page breadcrumb missing configured site title")
 	}
 	if !strings.Contains(pl, `property="og:title"`) {
 		t.Error("playlist page missing OG tags")

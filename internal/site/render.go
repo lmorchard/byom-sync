@@ -108,7 +108,7 @@ func (r *Renderer) renderChildren(outDir string, node *Node, crumbs []Crumb) err
 	for _, c := range node.Children {
 		trail := append(append([]Crumb{}, crumbs...), Crumb{Label: c.Title, Href: "/" + c.Path + "/"})
 		if c.IsDir {
-			if err := r.renderFolder(outDir, c, withCurrentLast(trail)); err != nil {
+			if err := r.renderFolder(outDir, c, withCurrentLast(r.Site.Title, trail)); err != nil {
 				return err
 			}
 			if err := r.renderChildren(outDir, c, trail); err != nil {
@@ -116,16 +116,17 @@ func (r *Renderer) renderChildren(outDir string, node *Node, crumbs []Crumb) err
 			}
 			continue
 		}
-		if err := r.renderPlaylist(outDir, c, withCurrentLast(trail)); err != nil {
+		if err := r.renderPlaylist(outDir, c, withCurrentLast(r.Site.Title, trail)); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// withCurrentLast strips the href from the final crumb (the current page).
-func withCurrentLast(crumbs []Crumb) []Crumb {
-	out := append([]Crumb{{Label: "mixtapes", Href: "/"}}, crumbs...)
+// withCurrentLast prepends the site-title home crumb and strips the href from
+// the final crumb (the current page).
+func withCurrentLast(title string, crumbs []Crumb) []Crumb {
+	out := append([]Crumb{{Label: title, Href: "/"}}, crumbs...)
 	out[len(out)-1].Href = ""
 	return out
 }
