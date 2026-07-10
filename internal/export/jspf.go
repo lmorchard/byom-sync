@@ -40,8 +40,9 @@ const byomExtNS = "https://github.com/lmorchard/byom-sync"
 type jspfExt struct {
 	Resolved *jspfResolved `json:"resolved,omitempty"`
 	// SpotifyPresent + DateOrphaned mirror playlist.SyncState, emitted only for
-	// orphaned tracks (spotify_present:false). A *bool so false is serialized
-	// while a present/absent track omits it. byom-player uses this for its orphan
+	// orphaned tracks (spotify_present:false) of Spotify-sourced playlists —
+	// native playlists never emit it. A *bool so false is serialized while a
+	// present/absent track omits it. byom-player uses this for its orphan
 	// indicator and degrades gracefully when absent.
 	SpotifyPresent *bool  `json:"spotify_present,omitempty"`
 	DateOrphaned   string `json:"date_orphaned,omitempty"`
@@ -75,7 +76,7 @@ func (JSPFExporter) Export(p playlist.Playlist, outputPath string, _ map[string]
 			jt.Location = []string{t.SpotifyURL}
 		}
 		// Collect byom-sync extension data into a single element: the resolved id
-		// (when present) and sync_state (only when orphaned).
+		// (when present) and sync_state (only when orphaned, Spotify-sourced only).
 		var ext jspfExt
 		hasExt := false
 		if t.YouTubeID != "" {
