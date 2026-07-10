@@ -57,8 +57,14 @@ type Track struct {
 	SpotifyURL string    `yaml:"spotify_url,omitempty"`
 	DurationMS int       `yaml:"duration_ms,omitempty"`
 	YouTubeID  string    `yaml:"youtube_id,omitempty"`
+	Image      string    `yaml:"image,omitempty"`
 	AddedAt    string    `yaml:"added_at,omitempty"`
 	SyncState  SyncState `yaml:"sync_state"`
+	// EnrichCandidates holds the top Spotify search matches for a track the
+	// enricher could not confidently resolve. To accept one, copy its SpotifyID
+	// up to the track's own spotify_id and re-run `resolve spotify`; the enricher
+	// then fills the remaining fields and clears this list.
+	EnrichCandidates []EnrichCandidate `yaml:"enrich_candidates,omitempty"`
 }
 
 // SyncState records whether a track is still present in the remote playlist and,
@@ -66,6 +72,19 @@ type Track struct {
 type SyncState struct {
 	SpotifyPresent bool   `yaml:"spotify_present"`
 	DateOrphaned   string `yaml:"date_orphaned,omitempty"`
+}
+
+// EnrichCandidate is one Spotify search match recorded for an ambiguous track,
+// with a 0..1 similarity Score. It carries enough metadata for a human to
+// eyeball the choice; SpotifyID is what you copy up to accept it.
+type EnrichCandidate struct {
+	SpotifyID  string  `yaml:"spotify_id"`
+	Title      string  `yaml:"title,omitempty"`
+	Artist     string  `yaml:"artist,omitempty"`
+	Album      string  `yaml:"album,omitempty"`
+	ISRC       string  `yaml:"isrc,omitempty"`
+	DurationMS int     `yaml:"duration_ms,omitempty"`
+	Score      float64 `yaml:"score"`
 }
 
 // Key returns the merge identity for a track: its ISRC when present, otherwise a
