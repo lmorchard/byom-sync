@@ -178,3 +178,46 @@ func TestSaveFileOverwritesAtomicallyLeavingNoTemp(t *testing.T) {
 		t.Errorf("expected only pl.yaml, got %v", names)
 	}
 }
+
+func TestSave_DoesNotClobberNativeFileOnSlugCollision(t *testing.T) {
+	dir := t.TempDir()
+
+	// A hand-authored native playlist (no SpotifyID).
+	nativePath, err := Save(dir, Playlist{
+		Title:  "Late Night Drives",
+		Tracks: []Track{{Title: "Nightcall", Artist: "Kavinsky"}},
+	})
+	if err != nil {
+		t.Fatalf("save native: %v", err)
+	}
+
+	// A Spotify playlist that slugifies to the same base name, synced for the
+	// first time.
+	spotifyPath, err := Save(dir, Playlist{
+		SpotifyID: "PID123",
+		Title:     "Late Night Drives",
+		Tracks:    []Track{{Title: "Something Else", Artist: "Someone", SyncState: SyncState{SpotifyPresent: true}}},
+	})
+	if err != nil {
+		t.Fatalf("save spotify: %v", err)
+	}
+
+	if spotifyPath == nativePath {
+		t.Fatalf("spotify playlist overwrote the native file at %q", nativePath)
+	}
+
+	// The native file must still be native (no SpotifyID) and unchanged.
+	got, err := LoadFile(nativePath)
+	if err != nil {
+		t.Fatalf("reload native: %v", err)
+	}
+	if got.SpotifyID != "" {
+		t.Errorf("native file gained a SpotifyID: %+v", got)
+	}
+	if !got.IsNative() {
+		t.Errorf("native file is no longer native: %+v", got)
+	}
+	if len(got.Tracks) != 1 || got.Tracks[0].Title != "Nightcall" {
+		t.Errorf("native file tracks changed: %+v", got.Tracks)
+	}
+}
