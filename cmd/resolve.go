@@ -8,8 +8,10 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/lmorchard/byom-sync/internal/auth"
 	"github.com/lmorchard/byom-sync/internal/playlist"
 	"github.com/lmorchard/byom-sync/internal/rcache"
+	"github.com/lmorchard/byom-sync/internal/spotifyenrich"
 	"github.com/lmorchard/byom-sync/internal/youtube"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -22,6 +24,15 @@ var (
 	resolveFlush     int
 	resolveReresolve bool
 	resolveNoCache   bool
+)
+
+var (
+	enrichInput        string
+	enrichLimit        int
+	enrichDelay        time.Duration
+	enrichFlush        int
+	enrichNoCache      bool
+	enrichCanonicalize bool
 )
 
 // defaultCachePath mirrors the auth config-dir logic: $XDG_CONFIG_HOME/byom-sync
@@ -249,6 +260,157 @@ func runResolveYouTube(ctx context.Context) error {
 	return nil
 }
 
+var resolveSpotifyCmd = &cobra.Command{
+	Use:   "spotify",
+	Short: "Enrich hub tracks with Spotify metadata (ISRC, ids, duration, art)",
+	Long: `Look up each hub track that lacks a spotify_id in Spotify and fill its
+technical fields (isrc, spotify_id, spotify_url, duration_ms, album, image),
+leaving your authored title/artist/album text intact. Only confident matches are
+written; ambiguous tracks get an enrich_candidates list in their YAML — to accept
+one, copy its spotify_id up to the track's own spotify_id and re-run.
+
+--limit caps tracks attempted per run; --delay paces requests. --canonicalize
+overwrites authored text with Spotify's official strings (off by default).
+Typically run before 'resolve youtube' so downstream identity keys on ISRC.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runResolveSpotify(context.Background())
+	},
+}
+
+func runResolveSpotify(ctx context.Context) error {
+	input := enrichInput
+	if input == "" {
+		input = viper.GetString("dir")
+	}
+	paths, err := hubPaths(input)
+	if err != nil {
+		return err
+	}
+	if len(paths) == 0 {
+		log.Warnf("no playlist YAML files found under %s — nothing to enrich", input)
+		return nil
+	}
+
+	client, tok, err := auth.Client(ctx, viper.GetString("client_id"), viper.GetInt("redirect_port"))
+	if err != nil {
+		return err
+	}
+	defer auth.PersistRefreshed(client, tok)
+	searcher := spotifyenrich.ClientSearcher{Client: client}
+
+	// Enrichment cache lives in the same cache.db (a second table). --no-cache
+	// bypasses it. openCache honors the shared resolveNoCache flag, so set it.
+	resolveNoCache = enrichNoCache
+	cache, err := openCache()
+	if err != nil {
+		return fmt.Errorf("open cache: %w", err)
+	}
+	if cache != nil {
+		defer func() { _ = cache.Close() }()
+	}
+	missTTL := viper.GetDuration("cache_miss_ttl")
+
+	var budget *int
+	if enrichLimit > 0 {
+		budget = &enrichLimit
+	}
+
+	total := 0
+	for _, path := range paths {
+		p, lerr := playlist.LoadFile(path)
+		if lerr != nil {
+			return fmt.Errorf("load %s: %w", path, lerr)
+		}
+		need := countNeedingEnrich(p)
+		base := filepath.Base(path)
+		if need == 0 {
+			log.Infof("%s: nothing to enrich (%d tracks)", base, len(p.Tracks))
+			continue
+		}
+		log.Infof("%s: %d of %d tracks need enrichment", base, need, len(p.Tracks))
+
+		var got, ambiguous, missed, skipped int
+		report := func(e spotifyenrich.Event) {
+			switch e.Kind {
+			case spotifyenrich.KindEnriched:
+				got++
+				log.Debugf("  enriched: %s - %s -> %s (score %.2f)", e.Artist, e.Title, e.SpotifyID, e.Score)
+			case spotifyenrich.KindPicked:
+				got++
+				log.Debugf("  picked: %s - %s -> %s", e.Artist, e.Title, e.SpotifyID)
+			case spotifyenrich.KindAmbiguous:
+				ambiguous++
+				log.Debugf("  ambiguous: %s - %s (best %.2f) — candidates written", e.Artist, e.Title, e.Score)
+			case spotifyenrich.KindMiss:
+				missed++
+				log.Debugf("  no match: %s - %s", e.Artist, e.Title)
+			case spotifyenrich.KindSkipped:
+				skipped++
+				log.Debugf("  skipped: %s - %s (spotify: false)", e.Artist, e.Title)
+			case spotifyenrich.KindError:
+				log.Warnf("  error: %s - %s: %v", e.Artist, e.Title, e.Err)
+			}
+		}
+
+		sinceSave := 0
+		onEnriched := func() error {
+			sinceSave++
+			if sinceSave >= enrichFlush {
+				sinceSave = 0
+				return playlist.SaveFile(path, p)
+			}
+			return nil
+		}
+
+		opts := spotifyenrich.Options{
+			Budget:       budget,
+			Pace:         enrichDelay,
+			Report:       report,
+			OnEnriched:   onEnriched,
+			Canonicalize: enrichCanonicalize,
+			MissTTL:      missTTL,
+		}
+		if cache != nil {
+			opts.Cache = cache
+		}
+		n, eerr := spotifyenrich.Enrich(ctx, searcher, &p, opts)
+		// Always persist: ambiguous runs wrote enrich_candidates even when n==0.
+		if serr := playlist.SaveFile(path, p); serr != nil {
+			return fmt.Errorf("save %s: %w", path, serr)
+		}
+		if eerr != nil {
+			return fmt.Errorf("enrich %s: %w", path, eerr)
+		}
+		log.Infof("%s: %d enriched, %d ambiguous (candidates written), %d no-match, %d skipped (spotify:false)", base, got, ambiguous, missed, skipped)
+		total += n
+		if budget != nil && *budget <= 0 {
+			log.Warnf("enrichment limit reached — stopping (progress saved)")
+			break
+		}
+	}
+	log.Warnf("Spotify enrich done: %d track(s) enriched", total)
+	return nil
+}
+
+// countNeedingEnrich counts tracks that require an enrichment pass: any track
+// still carrying enrich_candidates (a pending pick, or stale candidates to clear
+// on a now-opted-out track), plus unresolved tracks not opted out with
+// spotify:false. Tracks with a spotify_id and no candidates, and opted-out tracks
+// with no candidates, need nothing.
+func countNeedingEnrich(p playlist.Playlist) int {
+	n := 0
+	for _, t := range p.Tracks {
+		optedOut := t.Spotify != nil && !*t.Spotify
+		switch {
+		case len(t.EnrichCandidates) > 0:
+			n++ // a pick to apply, or stale candidates to clear
+		case !optedOut && t.SpotifyID == "":
+			n++ // unresolved and not opted out
+		}
+	}
+	return n
+}
+
 var (
 	primeInput            string
 	primeAssumeEmbeddable bool
@@ -316,6 +478,12 @@ var resolveCacheStatsCmd = &cobra.Command{
 		}
 		log.Infof("cache: %d entries — %d resolved, %d misses (%d expired, re-attempted next run)",
 			s.Total, s.Positive, s.Negative, s.ExpiredNegative)
+		es, err := db.EnrichStats(time.Now().Add(-missTTL))
+		if err != nil {
+			return err
+		}
+		log.Infof("enrichment cache: %d entries — %d resolved, %d misses (%d expired)",
+			es.Total, es.Positive, es.Negative, es.ExpiredNegative)
 		return nil
 	},
 }
@@ -413,6 +581,14 @@ func init() {
 	resolveYouTubeCmd.Flags().IntVar(&resolveFlush, "flush", 20, "write resolved ids to disk every N resolutions (granular resume)")
 	resolveYouTubeCmd.Flags().BoolVar(&resolveReresolve, "reresolve", false, "re-check tracks that already have a youtube_id and replace ones no longer embeddable")
 	resolveYouTubeCmd.Flags().BoolVar(&resolveNoCache, "no-cache", false, "bypass the resolution cache (pure network resolution)")
+
+	resolveCmd.AddCommand(resolveSpotifyCmd)
+	resolveSpotifyCmd.Flags().StringVar(&enrichInput, "input", "", "hub YAML file or directory (default: config dir)")
+	resolveSpotifyCmd.Flags().IntVar(&enrichLimit, "limit", 0, "max tracks attempted this run (0 = unlimited)")
+	resolveSpotifyCmd.Flags().DurationVar(&enrichDelay, "delay", 200*time.Millisecond, "pause between Spotify lookups")
+	resolveSpotifyCmd.Flags().IntVar(&enrichFlush, "flush", 20, "write enriched fields to disk every N fills (granular resume)")
+	resolveSpotifyCmd.Flags().BoolVar(&enrichNoCache, "no-cache", false, "bypass the enrichment cache")
+	resolveSpotifyCmd.Flags().BoolVar(&enrichCanonicalize, "canonicalize", false, "overwrite authored title/artist/album with Spotify's strings")
 
 	resolveCmd.AddCommand(resolvePrimeCmd)
 	resolvePrimeCmd.Flags().StringVar(&primeInput, "input", "", "hub YAML file or directory (default: config dir)")

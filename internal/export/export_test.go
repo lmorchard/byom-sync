@@ -111,10 +111,15 @@ func TestJSPFExport(t *testing.T) {
 		t.Errorf("location should carry spotify_url: %v", t0["location"])
 	}
 
-	// track with no ISRC omits identifier
+	// track with no ISRC gets a synthesized urn:byom identifier so every track
+	// is addressable downstream (e.g. by byom-player), even off-Spotify ones.
 	t1 := tracks[1].(map[string]any)
-	if _, present := t1["identifier"]; present {
-		t.Errorf("identifier should be omitted when ISRC empty: %v", t1)
+	ids1, ok := t1["identifier"].([]any)
+	if !ok || len(ids1) != 1 {
+		t.Fatalf("no-ISRC track should carry one identifier: %v", t1["identifier"])
+	}
+	if s, _ := ids1[0].(string); !strings.HasPrefix(s, "urn:byom:") {
+		t.Errorf("no-ISRC identifier should be urn:byom:<hash>, got %v", ids1[0])
 	}
 	// track with no spotify_url omits location
 	if _, present := t1["location"]; present {

@@ -23,7 +23,7 @@ YouTube resolution cache in `internal/rcache/` — an index, not a source of tru
 ## Layout
 
 - `cmd/` — Cobra commands: `root`, `version`, `init`, `auth`, `sync`, `import`,
-  `export`, `resolve` (subcommands `youtube`, `prime`, `cache stats`,
+  `export`, `resolve` (subcommands `youtube`, `spotify`, `prime`, `cache stats`,
   `cache clear`), `site`.
 - `internal/playlist/` — the hub: `types.go` (`Playlist`/`Track`/`SyncState`,
   `Track.Key()`), `store.go` (`Load`/`LoadFile`/`FindFileByID`/`Save`/`Slug`),
@@ -37,9 +37,15 @@ YouTube resolution cache in `internal/rcache/` — an index, not a source of tru
 - `internal/youtube/` — resolver chain: `resolver.go` (`Resolver`/`Chain`/`Result`),
   `ytdlp.go` (yt-dlp search + `IsEmbeddable`), `youtube.go` (Data API search),
   `resolve.go` (`Resolve` loop, `ResolveOptions`, `Cache` interface, TTL logic).
-- `internal/rcache/` — SQLite resolution cache: `Entry`, `Open`/`Get`/`Put`/
-  `Stats`/`Clear`. Keyed by `Track.Key()`; DB at `$XDG_CONFIG_HOME/byom-sync/cache.db`
-  (gitignored, disposable — `resolve prime` rebuilds positives from the hub).
+- `internal/spotifyenrich/` — reverse enrichment: `score.go` (`Candidate`,
+  `Score`, similarity), `search.go` (`Searcher`/`ClientSearcher`, `buildQuery`,
+  `toCandidate`, image pick), `enrich.go` (`Enrich` loop, `Options`, `Event`,
+  `Cache`, `applyCandidate`). Fills empty technical fields on confident matches;
+  writes `enrich_candidates` for ambiguous ones.
+- `internal/rcache/` — SQLite cache with two tables in one `cache.db`:
+  `resolution_cache` (YouTube: `Entry`, `Get`/`Put`) and `enrichment_cache`
+  (Spotify: `EnrichEntry`, `GetEnrich`/`PutEnrich`). `Stats`/`EnrichStats`/`Clear`
+  span both; keyed by `Track.Key()`; gitignored, disposable.
 - `internal/config/`, `internal/templates/` (embedded Markdown template).
 - `internal/site/` — the static site generator (`byom-sync site`): recursive
   hub walk → per-playlist JSPF + HTML pages embedding `<byom-player>`,
@@ -70,7 +76,8 @@ errcheck findings CI caught).
   `client_id`, `redirect_port` (8888), `dir`, `playlists`. Register the Spotify
   app redirect URI as exactly `http://127.0.0.1:8888/callback`.
 - **Sync:** per-playlist YAML matched on `spotify_id` (filename is cosmetic).
-  Track identity = ISRC, falling back to normalized `artist+title`. `archive`
+  Track identity (`Track.Key()`) = ISRC, falling back to normalized
+  `artist+title+album` (`ContentKey()`). `archive`
   (default) soft-orphans removed tracks (`spotify_present:false` +
   `date_orphaned`); `mirror` overwrites. Playlist selection: config `playlists`
   by default, positional args override, `--all` = all owned. Catalog-removed
@@ -87,9 +94,24 @@ errcheck findings CI caught).
   (`playlist.ParseText`; `# title:`/`# creator:` header lines, split on the first
   ` - `, malformed lines skipped with a warning); writes `<dir>/<slug>.yaml`,
   refusing to overwrite without `--force`.
+- **Enrichment (reverse path):** `resolve spotify` searches Spotify per track and
+  fills only *empty* technical fields (`isrc`, `spotify_id`, `spotify_url`,
+  `duration_ms`, `album`, `image`), preserving authored `title`/`artist`/`album`
+  unless `--canonicalize`. Only matches scoring ≥ threshold (0.8, in
+  `spotifyenrich`) auto-fill; below that, the track's top matches are written as
+  `enrich_candidates` — accept one by copying its `spotify_id` up to the track's
+  own `spotify_id` and re-running. Set `spotify: false` on a track (a `*bool`:
+  absent/`true` = enrich, `false` = opt out) to assert it has no Spotify
+  equivalent — `resolve spotify` then skips it and clears any stale candidates.
+  Recommended pipeline order:
+  author/`sync` → `resolve spotify` → `resolve youtube` → `export`, so YouTube
+  resolution and its cache are keyed on the enriched ISRC (`Track.Key()` is
+  ISRC-first).
 - **Exporters:** m3u8 builds `{prefix}/{Artist}/{Album}/{Title}.{ext}` paths
-  verbatim; jspf uses `urn:isrc:` identifiers + `location` (spotify_url); markdown
-  is frontmatter + tracklist table via the embedded, init-overridable template.
+  verbatim; jspf uses `urn:isrc:` identifiers (or a synthesized
+  `urn:byom:<sha1(ContentKey)>` when a track has no ISRC, so every track is
+  addressable) + `location` (spotify_url); markdown is frontmatter + tracklist
+  table via the embedded, init-overridable template.
 
 ## CI / release
 

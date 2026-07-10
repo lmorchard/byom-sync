@@ -57,9 +57,19 @@ type Track struct {
 	SpotifyURL string    `yaml:"spotify_url,omitempty"`
 	DurationMS int       `yaml:"duration_ms,omitempty"`
 	YouTubeID  string    `yaml:"youtube_id,omitempty"`
-	AddedAt    string    `yaml:"added_at,omitempty"`
 	Image      string    `yaml:"image,omitempty"`
-	SyncState  SyncState `yaml:"sync_state"`
+	AddedAt    string    `yaml:"added_at,omitempty"`
+	// Spotify is a tri-state opt-out for enrichment. nil (field absent) or true
+	// means "enrich normally"; false ("spotify: false") asserts the track has no
+	// Spotify equivalent, so `resolve spotify` skips it. A pointer so an explicit
+	// false is distinguishable from an unset default and serialized as such.
+	Spotify   *bool     `yaml:"spotify,omitempty"`
+	SyncState SyncState `yaml:"sync_state"`
+	// EnrichCandidates holds the top Spotify search matches for a track the
+	// enricher could not confidently resolve. To accept one, copy its SpotifyID
+	// up to the track's own spotify_id and re-run `resolve spotify`; the enricher
+	// then fills the remaining fields and clears this list.
+	EnrichCandidates []EnrichCandidate `yaml:"enrich_candidates,omitempty"`
 }
 
 // SyncState records whether a track is still present in the remote playlist and,
@@ -69,13 +79,35 @@ type SyncState struct {
 	DateOrphaned   string `yaml:"date_orphaned,omitempty"`
 }
 
-// Key returns the merge identity for a track: its ISRC when present, otherwise a
-// normalized "artist\ttitle" composite. Used to match tracks across syncs.
+// EnrichCandidate is one Spotify search match recorded for an ambiguous track,
+// with a 0..1 similarity Score. It carries enough metadata for a human to
+// eyeball the choice; SpotifyID is what you copy up to accept it.
+type EnrichCandidate struct {
+	SpotifyID  string  `yaml:"spotify_id"`
+	Title      string  `yaml:"title,omitempty"`
+	Artist     string  `yaml:"artist,omitempty"`
+	Album      string  `yaml:"album,omitempty"`
+	ISRC       string  `yaml:"isrc,omitempty"`
+	DurationMS int     `yaml:"duration_ms,omitempty"`
+	Score      float64 `yaml:"score"`
+}
+
+// Key returns the merge identity for a track: its ISRC when present, otherwise
+// the normalized artist+title+album composite (ContentKey). Used to match tracks
+// across syncs and to key the resolution caches.
 func (t Track) Key() string {
 	if t.ISRC != "" {
 		return "isrc:" + t.ISRC
 	}
-	return "at:" + normalize(t.Artist) + "\t" + normalize(t.Title)
+	return "at:" + t.ContentKey()
+}
+
+// ContentKey is the normalized "artist\ttitle\talbum" composite. It is the basis
+// for the ISRC-less Key() fallback and for the synthesized JSPF identifier, so
+// including album keeps two same-artist+title recordings on different albums
+// distinct. Independent of ISRC.
+func (t Track) ContentKey() string {
+	return normalize(t.Artist) + "\t" + normalize(t.Title) + "\t" + normalize(t.Album)
 }
 
 func normalize(s string) string {
