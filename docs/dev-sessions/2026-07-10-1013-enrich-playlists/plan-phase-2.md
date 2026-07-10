@@ -469,11 +469,12 @@ func TestScore_ExactMatchIsHigh(t *testing.T) {
 }
 
 func TestScore_MinorVariationClearsThreshold(t *testing.T) {
-	// authored loosely; Spotify has fuller strings
+	// authored loosely; Spotify has fuller strings. Containment-aware similarity
+	// should let this clear the auto-accept threshold.
 	tr := playlist.Track{Title: "Come Together", Artist: "Beatles"}
 	c := Candidate{Title: "Come Together - Remastered 2019", Artist: "The Beatles", Album: "Abbey Road"}
-	if s := Score(tr, c); s < 0.6 {
-		t.Errorf("close match scored too low: %v", s)
+	if s := Score(tr, c); s < DefaultThreshold {
+		t.Errorf("close match should clear the auto-accept threshold, got %v", s)
 	}
 }
 
@@ -495,7 +496,16 @@ func TestSim(t *testing.T) {
 	if got := sim("abc", ""); got != 0.0 {
 		t.Errorf("something vs empty: got %v want 0.0", got)
 	}
-	if got := sim("kitten", "sitting"); got < 0.5 || got > 0.6 {
+	// containment: the shorter string matching a contiguous run of the longer
+	// scores 1.0 — the property that fixes remaster suffixes / "The" prefixes.
+	if got := sim("beatles", "the beatles"); got != 1.0 {
+		t.Errorf("containment (prefix word): got %v want 1.0", got)
+	}
+	if got := sim("come together", "come together remastered 2019"); got != 1.0 {
+		t.Errorf("containment (suffix): got %v want 1.0", got)
+	}
+	// typos still degrade gracefully.
+	if got := sim("kitten", "sitting"); got < 0.6 || got > 0.7 {
 		t.Errorf("kitten/sitting ratio out of expected band: got %v", got)
 	}
 }
@@ -587,9 +597,12 @@ func norm(s string) string {
 	return strings.TrimSpace(b.String())
 }
 
-// sim is a 0..1 similarity ratio based on Levenshtein edit distance:
-// 1 - distance/maxLen. Two empty strings are identical (1.0); one empty and one
-// not is 0.0.
+// sim is a 0..1 similarity that rewards the shorter of the two strings matching
+// a contiguous run of the longer one — a "partial ratio". This keeps loosely
+// authored strings scoring high against fuller catalog strings ("come together"
+// vs "come together remastered 2019"; "beatles" vs "the beatles") while wrong
+// matches stay low. Two empty strings are identical (1.0); one empty and one not
+// is 0.0. Inputs are expected already normalized (see norm).
 func sim(a, b string) float64 {
 	if a == b {
 		return 1.0
@@ -597,34 +610,45 @@ func sim(a, b string) float64 {
 	if a == "" || b == "" {
 		return 0.0
 	}
-	d := levenshtein(a, b)
-	maxLen := len([]rune(a))
-	if l := len([]rune(b)); l > maxLen {
-		maxLen = l
+	ra, rb := []rune(a), []rune(b)
+	if len(ra) > len(rb) {
+		ra, rb = rb, ra // ra is the shorter string — the pattern
 	}
-	return 1.0 - float64(d)/float64(maxLen)
+	// Best edit-ratio of the pattern against any equal-length window of the
+	// longer string. An exact substring yields 1.0.
+	best := 0.0
+	for i := 0; i+len(ra) <= len(rb); i++ {
+		d := levenshtein(ra, rb[i:i+len(ra)])
+		r := 1.0 - float64(d)/float64(len(ra))
+		if r > best {
+			best = r
+			if best == 1.0 {
+				break
+			}
+		}
+	}
+	return best
 }
 
-// levenshtein computes edit distance between two strings (rune-aware).
-func levenshtein(a, b string) int {
-	ra, rb := []rune(a), []rune(b)
-	prev := make([]int, len(rb)+1)
-	curr := make([]int, len(rb)+1)
+// levenshtein computes edit distance between two rune slices.
+func levenshtein(a, b []rune) int {
+	prev := make([]int, len(b)+1)
+	curr := make([]int, len(b)+1)
 	for j := range prev {
 		prev[j] = j
 	}
-	for i := 1; i <= len(ra); i++ {
+	for i := 1; i <= len(a); i++ {
 		curr[0] = i
-		for j := 1; j <= len(rb); j++ {
+		for j := 1; j <= len(b); j++ {
 			cost := 1
-			if ra[i-1] == rb[j-1] {
+			if a[i-1] == b[j-1] {
 				cost = 0
 			}
 			curr[j] = min3(prev[j]+1, curr[j-1]+1, prev[j-1]+cost)
 		}
 		prev, curr = curr, prev
 	}
-	return prev[len(rb)]
+	return prev[len(b)]
 }
 
 func min3(a, b, c int) int {
@@ -642,7 +666,7 @@ func min3(a, b, c int) int {
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `go test ./internal/spotifyenrich/ -run 'TestScore|TestSim' -v`
-Expected: PASS. (If `TestScore_MinorVariationClearsThreshold` is borderline, do NOT change the test threshold to fit; the 0.6 bar is deliberately lenient. If it genuinely fails, report the computed score as DONE_WITH_CONCERNS so the weights can be reviewed.)
+Expected: PASS. The containment-aware `sim` makes the Beatles case (loose authored text vs a remastered/"The"-prefixed candidate) clear the 0.8 threshold. Do NOT tune a test's expectation to force green; if a score test genuinely fails, report the computed score as DONE_WITH_CONCERNS so the algorithm can be reviewed.
 
 - [ ] **Step 5: Commit**
 
