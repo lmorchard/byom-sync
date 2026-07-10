@@ -3,12 +3,14 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"time"
 
 	"github.com/lmorchard/byom-sync/internal/auth"
+	"github.com/lmorchard/byom-sync/internal/coverart"
 	"github.com/lmorchard/byom-sync/internal/playlist"
 	"github.com/lmorchard/byom-sync/internal/rcache"
 	"github.com/lmorchard/byom-sync/internal/spotifyenrich"
@@ -24,6 +26,13 @@ var (
 	resolveFlush     int
 	resolveReresolve bool
 	resolveNoCache   bool
+)
+
+var (
+	artInput   string
+	artLimit   int
+	artDelay   time.Duration
+	artNoCache bool
 )
 
 var (
@@ -275,6 +284,126 @@ Typically run before 'resolve youtube' so downstream identity keys on ISRC.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runResolveSpotify(context.Background())
 	},
+}
+
+var resolveArtCmd = &cobra.Command{
+	Use:   "art",
+	Short: "Fill missing cover art from MusicBrainz + the Cover Art Archive",
+	Long: `Find cover art for every hub track that has no image yet and write the URL
+into the YAML. Looks up MusicBrainz (release-group by artist+album when an album
+is present, else the recording by artist+title) and fetches the front cover from
+the Cover Art Archive. Public APIs — no key needed. Independent of spotify:false,
+so off-Spotify tracks get art too.
+
+--limit caps tracks attempted per run; --delay paces MusicBrainz requests (its
+~1 req/sec policy).`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runResolveArt(context.Background())
+	},
+}
+
+func runResolveArt(ctx context.Context) error {
+	input := artInput
+	if input == "" {
+		input = viper.GetString("dir")
+	}
+	paths, err := hubPaths(input)
+	if err != nil {
+		return err
+	}
+	if len(paths) == 0 {
+		log.Warnf("no playlist YAML files found under %s — nothing to do", input)
+		return nil
+	}
+
+	ua := viper.GetString("musicbrainz_user_agent")
+	if ua == "" {
+		ua = coverart.DefaultUserAgent
+	}
+	resolver := coverart.Resolver{
+		MB:  &coverart.MBClient{HTTP: http.DefaultClient, BaseURL: coverart.MBBaseURL, UserAgent: ua},
+		CAA: &coverart.CAAClient{HTTP: http.DefaultClient, BaseURL: coverart.CAABaseURL},
+	}
+
+	resolveNoCache = artNoCache
+	cache, err := openCache()
+	if err != nil {
+		return fmt.Errorf("open cache: %w", err)
+	}
+	if cache != nil {
+		defer func() { _ = cache.Close() }()
+	}
+	missTTL := viper.GetDuration("cache_miss_ttl")
+
+	var budget *int
+	if artLimit > 0 {
+		budget = &artLimit
+	}
+
+	total := 0
+	for _, path := range paths {
+		p, lerr := playlist.LoadFile(path)
+		if lerr != nil {
+			return fmt.Errorf("load %s: %w", path, lerr)
+		}
+		need := countMissingArt(p)
+		base := filepath.Base(path)
+		if need == 0 {
+			log.Infof("%s: all tracks have art (%d tracks)", base, len(p.Tracks))
+			continue
+		}
+		log.Infof("%s: %d of %d tracks need art", base, need, len(p.Tracks))
+
+		var got, missed int
+		report := func(e coverart.Event) {
+			switch e.Kind {
+			case coverart.KindFilled:
+				got++
+				log.Debugf("  art: %s - %s -> %s (via %s)", e.Artist, e.Title, e.ImageURL, e.Source)
+			case coverart.KindMiss:
+				missed++
+				log.Debugf("  no art: %s - %s", e.Artist, e.Title)
+			case coverart.KindError:
+				log.Warnf("  error: %s - %s: %v", e.Artist, e.Title, e.Err)
+			}
+		}
+
+		opts := coverart.Options{
+			Budget:  budget,
+			Pace:    artDelay,
+			Report:  report,
+			MissTTL: missTTL,
+		}
+		if cache != nil {
+			opts.Cache = cache
+		}
+		n, rerr := coverart.Resolve(ctx, resolver, &p, opts)
+		if serr := playlist.SaveFile(path, p); serr != nil {
+			return fmt.Errorf("save %s: %w", path, serr)
+		}
+		if rerr != nil {
+			return fmt.Errorf("resolve art %s: %w", path, rerr)
+		}
+		log.Infof("%s: %d art filled, %d no-art", base, got, missed)
+		total += n
+		if budget != nil && *budget <= 0 {
+			log.Warnf("art limit reached — stopping (progress saved)")
+			break
+		}
+	}
+	log.Warnf("Cover art done: %d track(s) filled", total)
+	return nil
+}
+
+// countMissingArt counts tracks with no image yet.
+func countMissingArt(p playlist.Playlist) int {
+	n := 0
+	for _, t := range p.Tracks {
+		if t.Image == "" {
+			n++
+		}
+	}
+	return n
 }
 
 func runResolveSpotify(ctx context.Context) error {
@@ -589,6 +718,12 @@ func init() {
 	resolveSpotifyCmd.Flags().IntVar(&enrichFlush, "flush", 20, "write enriched fields to disk every N fills (granular resume)")
 	resolveSpotifyCmd.Flags().BoolVar(&enrichNoCache, "no-cache", false, "bypass the enrichment cache")
 	resolveSpotifyCmd.Flags().BoolVar(&enrichCanonicalize, "canonicalize", false, "overwrite authored title/artist/album with Spotify's strings")
+
+	resolveCmd.AddCommand(resolveArtCmd)
+	resolveArtCmd.Flags().StringVar(&artInput, "input", "", "hub YAML file or directory (default: config dir)")
+	resolveArtCmd.Flags().IntVar(&artLimit, "limit", 0, "max tracks attempted this run (0 = unlimited)")
+	resolveArtCmd.Flags().DurationVar(&artDelay, "delay", 1100*time.Millisecond, "pause between MusicBrainz lookups (~1 req/sec policy)")
+	resolveArtCmd.Flags().BoolVar(&artNoCache, "no-cache", false, "bypass the art cache")
 
 	resolveCmd.AddCommand(resolvePrimeCmd)
 	resolvePrimeCmd.Flags().StringVar(&primeInput, "input", "", "hub YAML file or directory (default: config dir)")
