@@ -120,8 +120,8 @@ func TestTrack_SpotifyMarkerRoundTrip(t *testing.T) {
 		present bool
 	}{
 		"unset omits field": {in: Track{Title: "T", Artist: "A"}, wantYML: "spotify:", present: false},
-		"false serializes":   {in: Track{Title: "T", Artist: "A", Spotify: &no}, wantYML: "spotify: false", present: true},
-		"true serializes":    {in: Track{Title: "T", Artist: "A", Spotify: &yes}, wantYML: "spotify: true", present: true},
+		"false serializes":  {in: Track{Title: "T", Artist: "A", Spotify: &no}, wantYML: "spotify: false", present: true},
+		"true serializes":   {in: Track{Title: "T", Artist: "A", Spotify: &yes}, wantYML: "spotify: true", present: true},
 	}
 	for name, tc := range cases {
 		data, err := yaml.Marshal(tc.in)
@@ -173,5 +173,22 @@ func TestTrack_EnrichFieldsRoundTrip(t *testing.T) {
 	bare, _ := yaml.Marshal(Track{Title: "T", Artist: "A"})
 	if s := string(bare); strings.Contains(s, "image:") || strings.Contains(s, "enrich_candidates:") {
 		t.Errorf("bare track should omit image/enrich_candidates:\n%s", s)
+	}
+}
+
+func TestPlaylist_ImageRoundTrip(t *testing.T) {
+	data, err := yaml.Marshal(Playlist{Title: "T", Image: "https://img/pl.jpg"})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(data), "image: https://img/pl.jpg") {
+		t.Errorf("playlist image not serialized:\n%s", data)
+	}
+	// omitempty: no image -> no image key at the playlist level
+	bare, _ := yaml.Marshal(Playlist{Title: "T"})
+	for _, line := range strings.Split(string(bare), "\n") {
+		if strings.HasPrefix(line, "image:") {
+			t.Errorf("bare playlist should omit image:\n%s", bare)
+		}
 	}
 }
