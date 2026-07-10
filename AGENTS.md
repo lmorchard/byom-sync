@@ -22,8 +22,9 @@ YouTube resolution cache in `internal/rcache/` — an index, not a source of tru
 
 ## Layout
 
-- `cmd/` — Cobra commands: `root`, `version`, `init`, `auth`, `sync`, `export`,
-  `resolve` (subcommands `youtube`, `spotify`, `prime`, `cache stats`, `cache clear`).
+- `cmd/` — Cobra commands: `root`, `version`, `init`, `auth`, `sync`, `import`,
+  `export`, `resolve` (subcommands `youtube`, `spotify`, `prime`, `cache stats`,
+  `cache clear`).
 - `internal/playlist/` — the hub: `types.go` (`Playlist`/`Track`/`SyncState`,
   `Track.Key()`), `store.go` (`Load`/`LoadFile`/`FindFileByID`/`Save`/`Slug`),
   `merge.go` (`Merge`, `Archive`/`Mirror`).
@@ -83,7 +84,11 @@ errcheck findings CI caught).
   no source ID is set), not ad-hoc `spotify_id == ""` checks — this is the single
   extension point for future ingestion sources. `sync` never touches native files
   (it matches by `spotify_id`; slug collisions get a `-<id>` suffix). Spotify-only
-  behavior (orphan/`sync_state` emission) is gated on `Source()`.
+  behavior (orphan/`sync_state` emission) is gated on `Source()`. `import <file>`
+  builds a native playlist from a plain-text `{artist} - {title}` list
+  (`playlist.ParseText`; `# title:`/`# creator:` header lines, split on the first
+  ` - `, malformed lines skipped with a warning); writes `<dir>/<slug>.yaml`,
+  refusing to overwrite without `--force`.
 - **Enrichment (reverse path):** `resolve spotify` searches Spotify per track and
   fills only *empty* technical fields (`isrc`, `spotify_id`, `spotify_url`,
   `duration_ms`, `album`, `image`), preserving authored `title`/`artist`/`album`
