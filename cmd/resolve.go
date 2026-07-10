@@ -467,6 +467,12 @@ var resolveCacheStatsCmd = &cobra.Command{
 		}
 		log.Infof("cache: %d entries — %d resolved, %d misses (%d expired, re-attempted next run)",
 			s.Total, s.Positive, s.Negative, s.ExpiredNegative)
+		es, err := db.EnrichStats(time.Now().Add(-missTTL))
+		if err != nil {
+			return err
+		}
+		log.Infof("enrichment cache: %d entries — %d resolved, %d misses (%d expired)",
+			es.Total, es.Positive, es.Negative, es.ExpiredNegative)
 		return nil
 	},
 }
