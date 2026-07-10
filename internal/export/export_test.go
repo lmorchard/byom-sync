@@ -270,3 +270,54 @@ func TestJSPFExportEmitsSyncStateForOrphaned(t *testing.T) {
 		t.Errorf("want date_orphaned 2026-01-01T00:00:00Z, got %q", ext[0].DateOrphaned)
 	}
 }
+
+// nativePlaylist is a hand-authored playlist (no spotify_id). Its tracks have
+// SpotifyPresent=false by default, which must NOT be treated as "orphaned".
+func nativePlaylist() playlist.Playlist {
+	return playlist.Playlist{
+		Title:   "Late Night Drives",
+		Creator: "Les",
+		Tracks: []playlist.Track{
+			{Title: "Come Together", Artist: "The Beatles", Album: "Abbey Road"},
+			{Title: "Nightcall", Artist: "Kavinsky", YouTubeID: "MV_3Dpw-BRY"},
+		},
+	}
+}
+
+func TestJSPFExport_NativeOmitsOrphanState(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "native.jspf")
+	if err := (JSPFExporter{}).Export(nativePlaylist(), out, nil); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(out)
+
+	var doc map[string]any
+	if err := json.Unmarshal(got, &doc); err != nil {
+		t.Fatalf("output is not valid JSON: %v\n%s", err, got)
+	}
+	tracks := doc["playlist"].(map[string]any)["track"].([]any)
+	if len(tracks) != 2 {
+		t.Fatalf("expected 2 tracks: %v", tracks)
+	}
+
+	// Track 0: no youtube id, native -> no extension at all.
+	if _, present := tracks[0].(map[string]any)["extension"]; present {
+		t.Errorf("native track without a resolved id should have no extension: %v", tracks[0])
+	}
+
+	// Track 1: has a youtube id -> extension present, carries the resolved id,
+	// but must NOT carry spotify_present.
+	ext1, present := tracks[1].(map[string]any)["extension"]
+	if !present {
+		t.Fatalf("track with youtube id should keep its extension: %v", tracks[1])
+	}
+	elems := ext1.(map[string]any)["https://github.com/lmorchard/byom-sync"].([]any)
+	entry := elems[0].(map[string]any)
+	if _, hasOrphan := entry["spotify_present"]; hasOrphan {
+		t.Errorf("native track must not emit spotify_present: %v", entry)
+	}
+	if entry["resolved"].(map[string]any)["youtube"] != "MV_3Dpw-BRY" {
+		t.Errorf("resolved youtube id missing/incorrect: %v", entry)
+	}
+}

@@ -22,6 +22,31 @@ type Playlist struct {
 	Tracks      []Track   `yaml:"tracks"`
 }
 
+// Source identifies where a playlist came from. It is derived from which
+// source-ID field is populated, never stored as an explicit label — so adding a
+// new ingestion source later (e.g. YouTube playlists) means adding one field and
+// one case here, not migrating data.
+type Source string
+
+const (
+	SourceSpotify Source = "spotify"
+	SourceNative  Source = "native"
+)
+
+// Source returns the playlist's provenance: SourceSpotify when it carries a
+// Spotify playlist ID, otherwise SourceNative (hand-authored).
+func (p Playlist) Source() Source {
+	if p.SpotifyID != "" {
+		return SourceSpotify
+	}
+	return SourceNative
+}
+
+// IsNative reports whether the playlist has no upstream source (hand-authored).
+func (p Playlist) IsNative() bool {
+	return p.Source() == SourceNative
+}
+
 // Track is a single entry in a playlist.
 type Track struct {
 	Title      string    `yaml:"title"`
