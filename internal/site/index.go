@@ -6,26 +6,32 @@ import (
 	"path/filepath"
 )
 
-// IndexNode is the nav-only projection of a Node serialized into site-index.json
-// (no track data). Path is absolute-from-root with leading + trailing slashes.
+// IndexNode is the nav projection of a Node serialized into site-index.json (no
+// track data beyond the summary Meta line). Path is absolute-from-root with
+// leading + trailing slashes.
 type IndexNode struct {
 	Name     string      `json:"name"`
 	Title    string      `json:"title"`
 	Path     string      `json:"path"`
 	IsDir    bool        `json:"isDir"`
+	Meta     string      `json:"meta,omitempty"` // playlist summary line (leaves only)
 	Children []IndexNode `json:"children,omitempty"`
 }
 
 func toIndexNodes(children []*Node) []IndexNode {
 	out := make([]IndexNode, 0, len(children))
 	for _, c := range children {
-		out = append(out, IndexNode{
+		n := IndexNode{
 			Name:     c.Name,
 			Title:    c.Title,
 			Path:     "/" + c.Path + "/",
 			IsDir:    c.IsDir,
 			Children: toIndexNodes(c.Children),
-		})
+		}
+		if !c.IsDir {
+			n.Meta = playlistMeta(c.Playlist)
+		}
+		out = append(out, n)
 	}
 	return out
 }

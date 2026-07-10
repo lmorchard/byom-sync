@@ -3,13 +3,35 @@
 body { margin:0; padding:1.5rem; background:var(--bg); color:var(--fg); font-family:system-ui,sans-serif; line-height:1.5; max-width:52rem; margin-inline:auto; }
 a { color:var(--accent); }
 .site-header h1, .site-header a { font-size:1.4rem; font-weight:700; text-decoration:none; }
-.crumbs { color:var(--muted); font-size:.85rem; margin:.5rem 0 1rem; }
+.crumbs { color:var(--muted); font-size:.85rem; margin:0 0 1rem; }
 .tree-list { list-style:none; padding-left:1rem; }
 .tree-list > li { margin:.25rem 0; }
+.tree-list .meta { color:var(--muted); font-size:.9rem; }
 .intro { opacity:.9; }
 .site-footer { margin-top:2rem; color:var(--muted); font-size:.8rem; }
 .tracklist { color:var(--muted); }
-byom-player { display:block; max-width:36rem; margin:1rem 0; }
-byom-site-nav { display:block; margin:1rem 0; }
+byom-player { display:block; max-width:41.4rem; margin:1rem 0; }
+
+/* Two-column app shell for interior pages (playlist/folder): fixed to the
+   viewport; the nav sidebar and the main content each scroll independently, so
+   the page itself doesn't grow and scroll as a whole. */
+body.playlist, body.folder { max-width:64rem; height:100dvh; display:flex; flex-direction:column; overflow:hidden; }
+.layout { flex:1; min-height:0; display:grid; grid-template-columns:17.6rem minmax(0,1fr); gap:2.5rem; }
+.sidebar { min-height:0; overflow-y:auto; padding-right:.5rem; }
+.layout > main { min-height:0; overflow-y:auto; }
+byom-site-nav { display:block; }
+.site-nav ul { list-style:none; margin:0; padding:0; font-size:.85rem; }
+.site-nav ul ul { padding-left:.9rem; }
+.site-nav li { margin:.5rem 0; }
+.site-nav a { text-decoration:none; color:var(--fg); opacity:.75; }
+.site-nav a:hover { opacity:1; }
+.site-nav a[aria-current="page"] { color:var(--accent); opacity:1; font-weight:600; }
+.site-nav .nav-meta { display:block; color:var(--muted); font-size:.72rem; line-height:1.35; }
+@media (max-width:48rem) {
+  body.playlist, body.folder { height:auto; display:block; overflow:visible; }
+  .layout { grid-template-columns:1fr; }
+  .sidebar, .layout > main { overflow:visible; }
+}
+
 body.embed { padding:.5rem; }
 .embed-attribution { display:block; font-size:.75rem; color:var(--muted); margin-top:.4rem; }

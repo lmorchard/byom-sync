@@ -34,4 +34,11 @@ func TestWriteIndexJSON(t *testing.T) {
 	if nodes[1].Path != "/2014-top-songs/" {
 		t.Errorf("leaf path = %q", nodes[1].Path)
 	}
+	// Playlist leaves carry a summary Meta line for the sidebar; directories don't.
+	if nodes[1].Meta != "1 track" {
+		t.Errorf("leaf Meta = %q, want %q", nodes[1].Meta, "1 track")
+	}
+	if nodes[0].Meta != "" {
+		t.Errorf("directory Meta = %q, want empty", nodes[0].Meta)
+	}
 }

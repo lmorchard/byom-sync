@@ -3,8 +3,11 @@
 <head>{{template "head" .}}</head>
 <body class="playlist">
 <header class="site-header"><a href="/">{{.Site.Title}}</a></header>
+<div class="layout">
+<aside class="sidebar">
 <byom-site-nav></byom-site-nav>
 <script type="module" src="/assets/site-nav.js"></script>
+</aside>
 <main>
 {{template "crumbs" .}}
 {{template "player" .}}
@@ -13,6 +16,7 @@
   <ol class="tracklist">{{range .Playlist.Tracks}}<li>{{.Title}} — {{.Artist}}</li>{{end}}</ol>
 </noscript>
 </main>
+</div>
 {{template "footer" .}}
 </body>
 </html>

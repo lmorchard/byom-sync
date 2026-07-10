@@ -15,7 +15,7 @@
 <ul class="tree-list">
 {{range .}}
   <li class="{{if .IsDir}}dir{{else}}leaf{{end}}">
-    <a href="/{{.Path}}/">{{if .IsDir}}📁 {{end}}{{.Title}}</a>
+    <a href="/{{.Path}}/">{{if .IsDir}}📁 {{end}}{{.Title}}</a>{{if not .IsDir}} <span class="meta">— {{playlistMeta .Playlist}}</span>{{end}}
     {{if .IsDir}}{{template "treeList" .Children}}{{end}}
   </li>
 {{end}}

@@ -67,6 +67,7 @@ func NewRenderer(site SiteMeta) (*Renderer, error) {
 	funcs := template.FuncMap{
 		"markdown":     renderMarkdown,
 		"providersCSV": func(p []string) string { return strings.Join(p, ",") },
+		"playlistMeta": playlistMeta,
 	}
 	tmpl, err := template.New("site").Funcs(funcs).ParseFS(embedded, "templates/*.html")
 	if err != nil {
@@ -109,7 +110,7 @@ func (r *Renderer) renderChildren(outDir string, node *Node, crumbs []Crumb) err
 	for _, c := range node.Children {
 		trail := append(append([]Crumb{}, crumbs...), Crumb{Label: c.Title, Href: "/" + c.Path + "/"})
 		if c.IsDir {
-			if err := r.renderFolder(outDir, c, withCurrentLast(r.Site.Title, trail)); err != nil {
+			if err := r.renderFolder(outDir, c, withCurrentLast(trail)); err != nil {
 				return err
 			}
 			if err := r.renderChildren(outDir, c, trail); err != nil {
@@ -117,17 +118,18 @@ func (r *Renderer) renderChildren(outDir string, node *Node, crumbs []Crumb) err
 			}
 			continue
 		}
-		if err := r.renderPlaylist(outDir, c, withCurrentLast(r.Site.Title, trail)); err != nil {
+		if err := r.renderPlaylist(outDir, c, withCurrentLast(trail)); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// withCurrentLast prepends the site-title home crumb and strips the href from
-// the final crumb (the current page).
-func withCurrentLast(title string, crumbs []Crumb) []Crumb {
-	out := append([]Crumb{{Label: title, Href: "/"}}, crumbs...)
+// withCurrentLast strips the href from the final crumb (the current page). The
+// site-root home crumb is intentionally omitted — the site header already links
+// home — so the breadcrumb carries only intermediate folder context.
+func withCurrentLast(crumbs []Crumb) []Crumb {
+	out := append([]Crumb{}, crumbs...)
 	out[len(out)-1].Href = ""
 	return out
 }

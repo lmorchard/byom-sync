@@ -39,6 +39,11 @@ func TestRenderSite(t *testing.T) {
 	if !strings.Contains(landing, "Welcome") || !strings.Contains(landing, "/synthpop/") {
 		t.Error("landing missing intro or tree link")
 	}
+	// Each playlist in the tree carries a light metadata line (fixture leaves
+	// have a single track, no duration/date).
+	if !strings.Contains(landing, `class="meta">— 1 track`) {
+		t.Error("landing tree missing per-playlist metadata line")
+	}
 	pl := read("synthpop/bleep-bloop-bop/index.html")
 	if !strings.Contains(pl, `<byom-player`) || !strings.Contains(pl, `src="/synthpop/bleep-bloop-bop/playlist.jspf.json"`) {
 		t.Error("playlist page missing player tag")
@@ -49,8 +54,20 @@ func TestRenderSite(t *testing.T) {
 	if !strings.Contains(pl, `<byom-site-nav>`) {
 		t.Error("playlist page missing nav component")
 	}
-	if !strings.Contains(pl, `>Test Tapes</a>`) {
-		t.Error("playlist page breadcrumb missing configured site title")
+	// A nested page shows only its intermediate folder context, linked upward —
+	// and NOT a redundant site-root home crumb (the header already links home).
+	if !strings.Contains(pl, `<nav class="crumbs">`) || !strings.Contains(pl, `href="/synthpop/"`) {
+		t.Error("nested playlist breadcrumb should show its folder, linked")
+	}
+	crumbs := pl[strings.Index(pl, `<nav class="crumbs">`):]
+	crumbs = crumbs[:strings.Index(crumbs, `</nav>`)]
+	if strings.Contains(crumbs, `href="/">`) {
+		t.Error("breadcrumb should omit the site-root home crumb")
+	}
+	// Top-level playlist has nothing above it but home, so no breadcrumb at all.
+	top := read("2014-top-songs/index.html")
+	if strings.Contains(top, `<nav class="crumbs">`) {
+		t.Error("top-level playlist should have no breadcrumb")
 	}
 	if !strings.Contains(pl, `property="og:title"`) {
 		t.Error("playlist page missing OG tags")
