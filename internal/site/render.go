@@ -20,6 +20,7 @@ type SiteMeta struct {
 	Providers             []string
 	YouTubeSearchEndpoint string
 	SpotifyClientID       string
+	Pages                 []PageLink
 }
 
 // Crumb is one breadcrumb link (Href empty → plain text, i.e. current page).

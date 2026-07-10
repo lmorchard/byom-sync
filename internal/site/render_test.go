@@ -20,7 +20,9 @@ func TestRenderSite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := NewRenderer(testSite())
+	site := testSite()
+	site.Pages = []PageLink{{Title: "About", Href: "/about/"}, {Title: "Colophon", Href: "/colophon/"}}
+	r, err := NewRenderer(site)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,6 +75,16 @@ func TestRenderSite(t *testing.T) {
 		t.Error("playlist page missing OG tags")
 	}
 	embed := read("synthpop/bleep-bloop-bop/embed/index.html")
+	// Header nav: content-page links appear, in order, on interior + landing.
+	if i := strings.Index(pl, `href="/about/"`); i < 0 || strings.Index(pl, `href="/colophon/"`) < i {
+		t.Error("playlist header missing content-page nav in order")
+	}
+	if !strings.Contains(landing, `<nav class="page-nav">`) || !strings.Contains(landing, `href="/about/"`) {
+		t.Error("landing header missing content-page nav")
+	}
+	if strings.Contains(embed, `class="page-nav"`) {
+		t.Error("embed page must not carry the header nav")
+	}
 	if !strings.Contains(embed, "<byom-player") || strings.Contains(embed, "<byom-site-nav>") {
 		t.Error("embed should have player but no site nav")
 	}
