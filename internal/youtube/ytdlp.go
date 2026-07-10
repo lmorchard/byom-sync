@@ -63,7 +63,8 @@ func (y YtdlpResolver) Resolve(ctx context.Context, t playlist.Track) (Result, e
 			return Result{}, err
 		}
 		if embeddable {
-			return Result{VideoID: id, Source: "yt-dlp"}, nil
+			yes := true
+			return Result{VideoID: id, Source: "yt-dlp", Embeddable: &yes}, nil
 		}
 	}
 	return Result{}, nil // no embeddable candidate — leave unresolved

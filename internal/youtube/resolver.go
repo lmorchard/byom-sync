@@ -12,6 +12,9 @@ import (
 type Result struct {
 	VideoID string
 	Source  string
+	// Embeddable reports whether the producing resolver confirmed embedded
+	// playback. nil = not verified (e.g. the youtube-search fallback).
+	Embeddable *bool
 }
 
 // Resolver maps a track to a YouTube video id. A zero Result (empty VideoID) with
