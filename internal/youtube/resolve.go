@@ -6,7 +6,14 @@ import (
 	"time"
 
 	"github.com/lmorchard/byom-sync/internal/playlist"
+	"github.com/lmorchard/byom-sync/internal/rcache"
 )
+
+// Cache is the optional resolution cache consulted before any network call.
+type Cache interface {
+	Get(key string) (rcache.Entry, bool)
+	Put(key string, e rcache.Entry) error
+}
 
 // EventKind classifies what happened to a track, for narration.
 type EventKind string
@@ -47,6 +54,14 @@ type ResolveOptions struct {
 	// that fails Verify is cleared and resolved fresh; a passing one is kept.
 	Reresolve bool
 	Verify    func(ctx context.Context, videoID string) (bool, error)
+
+	// Cache, if non-nil, short-circuits resolution: reused ids and fresh misses
+	// avoid the network entirely (and do not consume Budget or Pace). Results are
+	// written back for future runs.
+	Cache    Cache
+	Now      func() time.Time // clock for TTL checks; defaults to time.Now
+	MissTTL  time.Duration    // negative-result freshness window
+	EmbedTTL time.Duration    // embeddability freshness window (Reresolve)
 }
 
 // Resolve resolves a YouTube video ID for every track in p that lacks one,
@@ -66,6 +81,18 @@ func Resolve(ctx context.Context, r Resolver, p *playlist.Playlist, opts Resolve
 		}
 		return nil
 	}
+	now := opts.Now
+	if now == nil {
+		now = time.Now
+	}
+	fresh := func(ts time.Time, ttl time.Duration) bool {
+		return ttl > 0 && now().Sub(ts) < ttl
+	}
+	cachePut := func(key string, e rcache.Entry) {
+		if opts.Cache != nil {
+			_ = opts.Cache.Put(key, e)
+		}
+	}
 
 	attempted := 0
 	for i := range p.Tracks {
@@ -75,6 +102,37 @@ func Resolve(ctx context.Context, r Resolver, p *playlist.Playlist, opts Resolve
 		if t.YouTubeID != "" && !reverify {
 			continue
 		}
+		key := t.Key()
+
+		// Cache short-circuits, consulted before the budget/pace block so a hit
+		// never consumes --limit or --delay (it's not a network call).
+		if opts.Cache != nil {
+			if e, ok := opts.Cache.Get(key); ok {
+				switch {
+				case reverify:
+					// Trust a fresh, matching, embeddable verdict — skip the yt-dlp verify.
+					if e.VideoID == t.YouTubeID && e.Embeddable != nil && *e.Embeddable && fresh(e.CheckedAt, opts.EmbedTTL) {
+						report(Event{Kind: KindKept, Artist: t.Artist, Title: t.Title, VideoID: t.YouTubeID})
+						continue
+					}
+				case e.VideoID != "":
+					// Positive hit: reuse the id (no TTL — a resolved id is forever).
+					t.YouTubeID = e.VideoID
+					resolved++
+					report(Event{Kind: KindResolved, Artist: t.Artist, Title: t.Title, VideoID: e.VideoID, Source: "cache"})
+					if err := persist(); err != nil {
+						return resolved, "", err
+					}
+					continue
+				case fresh(e.CheckedAt, opts.MissTTL):
+					// Fresh negative: skip re-attempting.
+					report(Event{Kind: KindMiss, Artist: t.Artist, Title: t.Title})
+					continue
+				}
+				// Expired miss (or stale/absent embed verdict): fall through to network.
+			}
+		}
+
 		if opts.Budget != nil && *opts.Budget <= 0 {
 			return resolved, "", nil
 		}
@@ -97,6 +155,8 @@ func Resolve(ctx context.Context, r Resolver, p *playlist.Playlist, opts Resolve
 				continue // keep the id; skip this track
 			}
 			if ok {
+				yes := true
+				cachePut(key, rcache.Entry{VideoID: t.YouTubeID, Source: "cache", Embeddable: &yes, ResolvedAt: now(), CheckedAt: now()})
 				report(Event{Kind: KindKept, Artist: t.Artist, Title: t.Title, VideoID: t.YouTubeID})
 				continue
 			}
@@ -123,6 +183,7 @@ func Resolve(ctx context.Context, r Resolver, p *playlist.Playlist, opts Resolve
 			if replacing {
 				kind = KindReplaced
 			}
+			cachePut(key, rcache.Entry{VideoID: res.VideoID, Source: res.Source, Embeddable: res.Embeddable, ResolvedAt: now(), CheckedAt: now()})
 			report(Event{Kind: kind, Artist: t.Artist, Title: t.Title, VideoID: res.VideoID, Source: res.Source})
 			if err := persist(); err != nil {
 				return resolved, "", err
@@ -130,11 +191,13 @@ func Resolve(ctx context.Context, r Resolver, p *playlist.Playlist, opts Resolve
 		} else if replacing {
 			// Non-embeddable id with no embeddable alternative: it's already cleared;
 			// persist the removal so the broken id doesn't linger on disk.
+			cachePut(key, rcache.Entry{VideoID: "", CheckedAt: now()})
 			report(Event{Kind: KindRemoved, Artist: t.Artist, Title: t.Title})
 			if err := persist(); err != nil {
 				return resolved, "", err
 			}
 		} else {
+			cachePut(key, rcache.Entry{VideoID: "", CheckedAt: now()})
 			report(Event{Kind: KindMiss, Artist: t.Artist, Title: t.Title})
 		}
 	}
