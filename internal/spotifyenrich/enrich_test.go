@@ -2,6 +2,7 @@ package spotifyenrich
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -11,13 +12,17 @@ import (
 
 // fakeSearcher returns canned candidates per query and records GetByID calls.
 type fakeSearcher struct {
-	byTitle map[string][]Candidate
-	byID    map[string]Candidate
-	calls   int
+	byTitle   map[string][]Candidate
+	byID      map[string]Candidate
+	searchErr error
+	calls     int
 }
 
 func (f *fakeSearcher) Search(_ context.Context, t playlist.Track) ([]Candidate, error) {
 	f.calls++
+	if f.searchErr != nil {
+		return nil, f.searchErr
+	}
 	return f.byTitle[t.Title], nil
 }
 
@@ -168,5 +173,70 @@ func TestEnrich_CachePositiveShortCircuits(t *testing.T) {
 	}
 	if p.Tracks[0].SpotifyID != "cached" {
 		t.Errorf("cache positive should fill the track: %+v", p.Tracks[0])
+	}
+}
+
+func TestEnrich_CacheFreshMissSkips(t *testing.T) {
+	fixedNow := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)
+	p := &playlist.Playlist{Tracks: []playlist.Track{{Title: "Nope", Artist: "X"}}}
+	key := p.Tracks[0].Key()
+	cache := &fakeCache{m: map[string]rcache.EnrichEntry{
+		key: {SpotifyID: "", CheckedAt: fixedNow},
+	}}
+	s := &fakeSearcher{}
+	var kinds []EventKind
+	n, _ := Enrich(context.Background(), s, p, Options{
+		Cache:   cache,
+		MissTTL: 24 * time.Hour,
+		Now:     func() time.Time { return fixedNow },
+		Report:  func(e Event) { kinds = append(kinds, e.Kind) },
+	})
+	if n != 0 || s.calls != 0 {
+		t.Fatalf("fresh miss should skip live search: n=%d calls=%d", n, s.calls)
+	}
+	if len(kinds) != 1 || kinds[0] != KindMiss {
+		t.Fatalf("expected one miss event: kinds=%v", kinds)
+	}
+	if p.Tracks[0].SpotifyID != "" {
+		t.Errorf("track should remain unenriched: %+v", p.Tracks[0])
+	}
+}
+
+func TestEnrich_CacheExpiredMissFallsThrough(t *testing.T) {
+	fixedNow := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)
+	p := &playlist.Playlist{Tracks: []playlist.Track{{Title: "Song", Artist: "X"}}}
+	key := p.Tracks[0].Key()
+	cache := &fakeCache{m: map[string]rcache.EnrichEntry{
+		key: {SpotifyID: "", CheckedAt: fixedNow.Add(-48 * time.Hour)},
+	}}
+	s := &fakeSearcher{byTitle: map[string][]Candidate{
+		"Song": {{SpotifyID: "sid", Title: "Song", Artist: "X"}},
+	}}
+	n, _ := Enrich(context.Background(), s, p, Options{
+		Cache:   cache,
+		MissTTL: 24 * time.Hour,
+		Now:     func() time.Time { return fixedNow },
+	})
+	if s.calls != 1 {
+		t.Fatalf("expired miss should fall through to live search: calls=%d", s.calls)
+	}
+	if n != 1 || p.Tracks[0].SpotifyID != "sid" {
+		t.Errorf("expired miss should get enriched by live search: n=%d track=%+v", n, p.Tracks[0])
+	}
+}
+
+func TestEnrich_SearchErrorReported(t *testing.T) {
+	p := &playlist.Playlist{Tracks: []playlist.Track{{Title: "Song", Artist: "X"}}}
+	s := &fakeSearcher{searchErr: errors.New("boom")}
+	var kinds []EventKind
+	n, err := Enrich(context.Background(), s, p, Options{Report: func(e Event) { kinds = append(kinds, e.Kind) }})
+	if err != nil {
+		t.Fatalf("per-track search error should not abort Enrich: err=%v", err)
+	}
+	if n != 0 || len(kinds) != 1 || kinds[0] != KindError {
+		t.Fatalf("expected one error event: n=%d kinds=%v", n, kinds)
+	}
+	if p.Tracks[0].SpotifyID != "" {
+		t.Errorf("track should remain unenriched after search error: %+v", p.Tracks[0])
 	}
 }
