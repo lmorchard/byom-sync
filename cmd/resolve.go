@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lmorchard/byom-sync/internal/playlist"
+	"github.com/lmorchard/byom-sync/internal/rcache"
 	"github.com/lmorchard/byom-sync/internal/youtube"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -20,7 +21,34 @@ var (
 	resolveDelay     time.Duration
 	resolveFlush     int
 	resolveReresolve bool
+	resolveNoCache   bool
 )
+
+// defaultCachePath mirrors the auth config-dir logic: $XDG_CONFIG_HOME/byom-sync
+// (or ~/.config/byom-sync), file cache.db.
+func defaultCachePath() string {
+	var base string
+	if v := os.Getenv("XDG_CONFIG_HOME"); v != "" {
+		base = filepath.Join(v, "byom-sync")
+	} else if home, err := os.UserHomeDir(); err == nil {
+		base = filepath.Join(home, ".config", "byom-sync")
+	} else {
+		base = "byom-sync"
+	}
+	return filepath.Join(base, "cache.db")
+}
+
+// openCache opens the resolution cache unless --no-cache is set (then nil, nil).
+func openCache() (*rcache.DB, error) {
+	if resolveNoCache {
+		return nil, nil
+	}
+	path := viper.GetString("cache_path")
+	if path == "" {
+		path = defaultCachePath()
+	}
+	return rcache.Open(path)
+}
 
 var resolveCmd = &cobra.Command{
 	Use:   "resolve",
@@ -87,6 +115,16 @@ func runResolveYouTube(ctx context.Context) error {
 	chain.OnDisable = func(name string, err error) {
 		log.Warnf("resolver %q exhausted (%v) — continuing without it", name, err)
 	}
+
+	cache, err := openCache()
+	if err != nil {
+		return fmt.Errorf("open cache: %w", err)
+	}
+	if cache != nil {
+		defer func() { _ = cache.Close() }()
+	}
+	missTTL := viper.GetDuration("cache_miss_ttl")
+	embedTTL := viper.GetDuration("cache_embed_ttl")
 
 	var budget *int
 	if resolveLimit > 0 {
@@ -158,14 +196,22 @@ func runResolveYouTube(ctx context.Context) error {
 			return nil
 		}
 
-		n, stop, err := youtube.Resolve(ctx, chain, &p, youtube.ResolveOptions{
+		opts := youtube.ResolveOptions{
 			Budget:     budget,
 			Pace:       resolveDelay,
 			Report:     report,
 			OnResolved: onResolved,
 			Reresolve:  resolveReresolve,
 			Verify:     ytdlp.IsEmbeddable,
-		})
+			MissTTL:    missTTL,
+			EmbedTTL:   embedTTL,
+		}
+		// Assign only when non-nil: a typed-nil *rcache.DB in the interface field
+		// would read as non-nil and Resolve would call methods on a nil DB.
+		if cache != nil {
+			opts.Cache = cache
+		}
+		n, stop, err := youtube.Resolve(ctx, chain, &p, opts)
 		// Flush any resolutions since the last batched save (also covers an early
 		// stop). Do this before surfacing a resolve error so partial progress sticks.
 		if sinceSave > 0 {
@@ -239,4 +285,5 @@ func init() {
 	resolveYouTubeCmd.Flags().DurationVar(&resolveDelay, "delay", 500*time.Millisecond, "pause between searches to stay under the API rate limit")
 	resolveYouTubeCmd.Flags().IntVar(&resolveFlush, "flush", 20, "write resolved ids to disk every N resolutions (granular resume)")
 	resolveYouTubeCmd.Flags().BoolVar(&resolveReresolve, "reresolve", false, "re-check tracks that already have a youtube_id and replace ones no longer embeddable")
+	resolveYouTubeCmd.Flags().BoolVar(&resolveNoCache, "no-cache", false, "bypass the resolution cache (pure network resolution)")
 }
