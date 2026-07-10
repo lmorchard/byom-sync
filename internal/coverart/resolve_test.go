@@ -104,3 +104,22 @@ func TestResolve_CacheFreshMissSkips(t *testing.T) {
 		t.Fatalf("fresh miss should skip lookup: n=%d calls=%d", n, a.calls)
 	}
 }
+
+func TestResolve_CacheExpiredMissFallsThrough(t *testing.T) {
+	now := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)
+	p := &playlist.Playlist{Tracks: []playlist.Track{{Title: "Song", Artist: "A"}}}
+	key := p.Tracks[0].Key()
+	cache := &fakeCache{m: map[string]rcache.ArtEntry{
+		key: {ImageURL: "", CheckedAt: now.Add(-48 * time.Hour)},
+	}}
+	a := &fakeArter{byTitle: map[string]Result{"Song": {ImageURL: "https://img"}}}
+	n, _ := Resolve(context.Background(), a, p, Options{
+		Cache: cache, MissTTL: 24 * time.Hour, Now: func() time.Time { return now },
+	})
+	if a.calls != 1 {
+		t.Fatalf("expired miss should fall through to a live lookup: calls=%d", a.calls)
+	}
+	if n != 1 || p.Tracks[0].Image != "https://img" {
+		t.Errorf("expired miss should get filled by live lookup: n=%d track=%+v", n, p.Tracks[0])
+	}
+}
