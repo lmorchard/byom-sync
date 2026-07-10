@@ -136,6 +136,25 @@ func TestJSPFExport(t *testing.T) {
 	}
 }
 
+func TestJSPFExport_ExplicitPlaylistImageWins(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "pi.jspf")
+	p := samplePlaylist() // first track has Image https://img/song-one.jpg
+	p.Image = "https://img/playlist-explicit.jpg"
+	if err := (JSPFExporter{}).Export(p, out, nil); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(out)
+	var doc map[string]any
+	if err := json.Unmarshal(got, &doc); err != nil {
+		t.Fatalf("output is not valid JSON: %v", err)
+	}
+	pl := doc["playlist"].(map[string]any)
+	if pl["image"] != "https://img/playlist-explicit.jpg" {
+		t.Errorf("explicit Playlist.Image should win over the first-track fallback: %v", pl["image"])
+	}
+}
+
 func TestMarkdownExport(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out.md")
