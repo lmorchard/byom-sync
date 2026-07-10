@@ -1,5 +1,6 @@
 # Example workflow for a CONTENT repo (your playlist hub) — not byom-sync itself.
-# Copy into your hub repo, adjust paths, and enable GitHub Pages (source: Actions).
+# Copy into your hub repo as .github/workflows/deploy.yml (drop the .example suffix) and adjust paths.
+# Then enable GitHub Pages (source: Actions).
 name: Deploy mixtapes site
 on:
   push:
