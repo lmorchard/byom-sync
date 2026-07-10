@@ -23,7 +23,7 @@ YouTube resolution cache in `internal/rcache/` — an index, not a source of tru
 ## Layout
 
 - `cmd/` — Cobra commands: `root`, `version`, `init`, `auth`, `sync`, `import`,
-  `export`, `resolve` (subcommands `youtube`, `spotify`, `prime`, `cache stats`,
+  `export`, `resolve` (subcommands `youtube`, `spotify`, `art`, `prime`, `cache stats`,
   `cache clear`).
 - `internal/playlist/` — the hub: `types.go` (`Playlist`/`Track`/`SyncState`,
   `Track.Key()`), `store.go` (`Load`/`LoadFile`/`FindFileByID`/`Save`/`Slug`),
@@ -42,10 +42,16 @@ YouTube resolution cache in `internal/rcache/` — an index, not a source of tru
   `toCandidate`, image pick), `enrich.go` (`Enrich` loop, `Options`, `Event`,
   `Cache`, `applyCandidate`). Fills empty technical fields on confident matches;
   writes `enrich_candidates` for ambiguous ones.
-- `internal/rcache/` — SQLite cache with two tables in one `cache.db`:
-  `resolution_cache` (YouTube: `Entry`, `Get`/`Put`) and `enrichment_cache`
-  (Spotify: `EnrichEntry`, `GetEnrich`/`PutEnrich`). `Stats`/`EnrichStats`/`Clear`
-  span both; keyed by `Track.Key()`; gitignored, disposable.
+- `internal/coverart/` — cover-art resolution: `musicbrainz.go` (`MBClient`:
+  release-group + recording search), `coverartarchive.go` (`CAAClient`: front
+  image for a release/release-group MBID), `resolver.go` (`Resolver`/`Arter`,
+  album-first then recording fallback), `resolve.go` (`Resolve` loop, `Options`,
+  `Event`, `Cache`). Public APIs, no key; MusicBrainz needs a User-Agent + ~1
+  req/sec pacing.
+- `internal/rcache/` — SQLite cache with three tables in one `cache.db`:
+  `resolution_cache` (YouTube), `enrichment_cache` (Spotify), and `art_cache`
+  (cover art: `ArtEntry`, `GetArt`/`PutArt`). `Stats`/`EnrichStats`/`ArtStats`
+  and `Clear` span all three; keyed by `Track.Key()`; gitignored, disposable.
 - `internal/config/`, `internal/templates/` (embedded Markdown template).
 
 ## Commands (Makefile-first)
@@ -100,14 +106,19 @@ errcheck findings CI caught).
   absent/`true` = enrich, `false` = opt out) to assert it has no Spotify
   equivalent — `resolve spotify` then skips it and clears any stale candidates.
   Recommended pipeline order:
-  author/`sync` → `resolve spotify` → `resolve youtube` → `export`, so YouTube
-  resolution and its cache are keyed on the enriched ISRC (`Track.Key()` is
-  ISRC-first).
+  author/`sync` → `resolve spotify` → `resolve art` → `resolve youtube` → `export`.
+- **Cover art:** `Track.Image` (album cover URL) is populated by `resolve spotify`
+  (free from the Spotify search response) and, for gaps, by `resolve art`, which
+  queries MusicBrainz (release-group by artist+album, else recording by
+  artist+title) and stores the Cover Art Archive front image. `resolve art` fills
+  any track missing an image regardless of `spotify:false`, so off-Spotify tracks
+  get art. `Playlist.Image` is playlist-level art (falls back to the first track's
+  image at export). Pipeline: `resolve spotify` → `resolve art` → `resolve youtube`
+  → `export`.
 - **Exporters:** m3u8 builds `{prefix}/{Artist}/{Album}/{Title}.{ext}` paths
-  verbatim; jspf uses `urn:isrc:` identifiers (or a synthesized
-  `urn:byom:<sha1(ContentKey)>` when a track has no ISRC, so every track is
-  addressable) + `location` (spotify_url); markdown is frontmatter + tracklist
-  table via the embedded, init-overridable template.
+  verbatim; jspf uses `urn:isrc:`/`urn:byom:` identifiers + `location`
+  (spotify_url) + `image` (track and playlist cover art); markdown is frontmatter
+  + tracklist table via the embedded, init-overridable template.
 
 ## CI / release
 
