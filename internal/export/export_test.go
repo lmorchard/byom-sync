@@ -225,8 +225,48 @@ func TestJSPFExportEmitsYouTubeExtension(t *testing.T) {
 	if len(ext) == 0 || ext[0].Resolved.YouTube != "vid42" {
 		t.Errorf("missing/incorrect youtube extension:\n%s", raw)
 	}
-	// Track without a YouTubeID emits no extension key.
-	if len(doc.Playlist.Track[1].Extension) != 0 {
-		t.Errorf("track 2 should have no extension, got %v", doc.Playlist.Track[1].Extension)
+	// Track 2 is orphaned, so it carries a sync_state extension but no resolved id.
+	ext2 := doc.Playlist.Track[1].Extension["https://github.com/lmorchard/byom-sync"]
+	if len(ext2) == 0 || ext2[0].Resolved.YouTube != "" {
+		t.Errorf("track 2 should have a sync_state extension and no resolved id, got %v", ext2)
+	}
+}
+
+func TestJSPFExportEmitsSyncStateForOrphaned(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "out.jspf.json")
+	if err := (JSPFExporter{}).Export(samplePlaylist(), out, nil); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(out)
+
+	var doc struct {
+		Playlist struct {
+			Track []struct {
+				Extension map[string][]struct {
+					SpotifyPresent *bool  `json:"spotify_present"`
+					DateOrphaned   string `json:"date_orphaned"`
+				} `json:"extension"`
+			} `json:"track"`
+		} `json:"playlist"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	// Track 1 is present → no byom-sync extension at all.
+	if len(doc.Playlist.Track[0].Extension) != 0 {
+		t.Errorf("present track should emit no extension, got %v", doc.Playlist.Track[0].Extension)
+	}
+	// Track 2 is orphaned → spotify_present:false + date_orphaned.
+	ext := doc.Playlist.Track[1].Extension["https://github.com/lmorchard/byom-sync"]
+	if len(ext) == 0 {
+		t.Fatalf("orphaned track missing sync_state extension:\n%s", raw)
+	}
+	if ext[0].SpotifyPresent == nil || *ext[0].SpotifyPresent {
+		t.Errorf("want spotify_present:false, got %v", ext[0].SpotifyPresent)
+	}
+	if ext[0].DateOrphaned != "2026-01-01T00:00:00Z" {
+		t.Errorf("want date_orphaned 2026-01-01T00:00:00Z, got %q", ext[0].DateOrphaned)
 	}
 }

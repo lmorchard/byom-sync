@@ -33,12 +33,18 @@ type jspfTrack struct {
 	Extension  map[string][]jspfExt `json:"extension,omitempty"`
 }
 
-// byomExtNS namespaces byom-sync's JSPF track extension (resolved ids now, and
-// sync_state later). Kept in sync with byom-player's reader.
+// byomExtNS namespaces byom-sync's JSPF track extension (resolved ids and
+// sync_state). Kept in sync with byom-player's reader.
 const byomExtNS = "https://github.com/lmorchard/byom-sync"
 
 type jspfExt struct {
 	Resolved *jspfResolved `json:"resolved,omitempty"`
+	// SpotifyPresent + DateOrphaned mirror playlist.SyncState, emitted only for
+	// orphaned tracks (spotify_present:false). A *bool so false is serialized
+	// while a present/absent track omits it. byom-player uses this for its orphan
+	// indicator and degrades gracefully when absent.
+	SpotifyPresent *bool  `json:"spotify_present,omitempty"`
+	DateOrphaned   string `json:"date_orphaned,omitempty"`
 }
 
 type jspfResolved struct {
@@ -68,10 +74,22 @@ func (JSPFExporter) Export(p playlist.Playlist, outputPath string, _ map[string]
 		if t.SpotifyURL != "" {
 			jt.Location = []string{t.SpotifyURL}
 		}
+		// Collect byom-sync extension data into a single element: the resolved id
+		// (when present) and sync_state (only when orphaned).
+		var ext jspfExt
+		hasExt := false
 		if t.YouTubeID != "" {
-			jt.Extension = map[string][]jspfExt{
-				byomExtNS: {{Resolved: &jspfResolved{YouTube: t.YouTubeID}}},
-			}
+			ext.Resolved = &jspfResolved{YouTube: t.YouTubeID}
+			hasExt = true
+		}
+		if !t.SyncState.SpotifyPresent {
+			absent := false
+			ext.SpotifyPresent = &absent
+			ext.DateOrphaned = t.SyncState.DateOrphaned
+			hasExt = true
+		}
+		if hasExt {
+			jt.Extension = map[string][]jspfExt{byomExtNS: {ext}}
 		}
 		doc.Playlist.Track = append(doc.Playlist.Track, jt)
 	}
