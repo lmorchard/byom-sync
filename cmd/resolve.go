@@ -293,6 +293,55 @@ or you clear the cache.`,
 	},
 }
 
+var clearMissesOnly bool
+
+var resolveCacheCmd = &cobra.Command{
+	Use:   "cache",
+	Short: "Inspect or clear the resolution cache",
+}
+
+var resolveCacheStatsCmd = &cobra.Command{
+	Use:   "stats",
+	Short: "Show resolution cache coverage",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		db, err := openCache()
+		if err != nil {
+			return fmt.Errorf("open cache: %w", err)
+		}
+		defer func() { _ = db.Close() }()
+		missTTL := viper.GetDuration("cache_miss_ttl")
+		s, err := db.Stats(time.Now().Add(-missTTL))
+		if err != nil {
+			return err
+		}
+		log.Infof("cache: %d entries — %d resolved, %d misses (%d expired, re-attempted next run)",
+			s.Total, s.Positive, s.Negative, s.ExpiredNegative)
+		return nil
+	},
+}
+
+var resolveCacheClearCmd = &cobra.Command{
+	Use:   "clear",
+	Short: "Delete cache entries (all, or --misses-only)",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		db, err := openCache()
+		if err != nil {
+			return fmt.Errorf("open cache: %w", err)
+		}
+		defer func() { _ = db.Close() }()
+		n, err := db.Clear(clearMissesOnly)
+		if err != nil {
+			return err
+		}
+		what := "entries"
+		if clearMissesOnly {
+			what = "miss entries"
+		}
+		log.Warnf("cleared %d %s from the resolution cache", n, what)
+		return nil
+	},
+}
+
 // primeCache seeds the cache from tracks that already have a youtube_id. It
 // returns how many keys were seeded and how many cross-playlist duplicates were
 // collapsed onto an already-seen key.
@@ -368,4 +417,9 @@ func init() {
 	resolveCmd.AddCommand(resolvePrimeCmd)
 	resolvePrimeCmd.Flags().StringVar(&primeInput, "input", "", "hub YAML file or directory (default: config dir)")
 	resolvePrimeCmd.Flags().BoolVar(&primeAssumeEmbeddable, "assume-embeddable", true, "mark seeded ids as embeddable (skip re-verify within the embed TTL)")
+
+	resolveCmd.AddCommand(resolveCacheCmd)
+	resolveCacheCmd.AddCommand(resolveCacheStatsCmd)
+	resolveCacheCmd.AddCommand(resolveCacheClearCmd)
+	resolveCacheClearCmd.Flags().BoolVar(&clearMissesOnly, "misses-only", false, "clear only negative (miss) entries, keeping resolved ids")
 }
