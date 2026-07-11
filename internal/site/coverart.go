@@ -12,37 +12,24 @@ import (
 // build over one absent cover). Each source is copied at most once.
 func WriteCoverArt(hubDir, outDir string, root *Node) error {
 	seen := map[string]bool{}
-	var walk func(n *Node) error
-	walk = func(n *Node) error {
-		for _, c := range n.Children {
-			if c.IsDir {
-				if err := walk(c); err != nil {
-					return err
-				}
-				continue
-			}
-			_, local := siteCover(c.Playlist)
-			if local == "" || seen[local] {
-				continue
-			}
-			seen[local] = true
-			rel := filepath.FromSlash(local)
-			data, err := os.ReadFile(filepath.Join(hubDir, rel))
-			if err != nil {
-				if os.IsNotExist(err) {
-					continue
-				}
-				return err
-			}
-			dst := filepath.Join(outDir, rel)
-			if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-				return err
-			}
-			if err := os.WriteFile(dst, data, 0o644); err != nil {
-				return err
-			}
+	return walkPlaylists(root, func(c *Node) error {
+		_, local := siteCover(c.Playlist)
+		if local == "" || seen[local] {
+			return nil
 		}
-		return nil
-	}
-	return walk(root)
+		seen[local] = true
+		rel := filepath.FromSlash(local)
+		data, err := os.ReadFile(filepath.Join(hubDir, rel))
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		}
+		dst := filepath.Join(outDir, rel)
+		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+			return err
+		}
+		return os.WriteFile(dst, data, 0o644)
+	})
 }
