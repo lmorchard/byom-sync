@@ -71,3 +71,29 @@ func TestIndexNodeYear(t *testing.T) {
 		t.Errorf("undated b.Year = %d, want 0", byName["b"].Year)
 	}
 }
+
+func TestIndexNodeImage(t *testing.T) {
+	root, err := BuildTree(writeFixtureHub(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := t.TempDir()
+	if err := WriteIndexJSON(out, root); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(filepath.Join(out, "site-index.json"))
+	var nodes []IndexNode
+	if err := json.Unmarshal(data, &nodes); err != nil {
+		t.Fatal(err)
+	}
+	// nodes[1] is the top-level leaf 2014-top-songs (dir "synthpop" sorts first).
+	if nodes[1].Name != "2014-top-songs" {
+		t.Fatalf("expected 2014-top-songs leaf, got %q", nodes[1].Name)
+	}
+	if nodes[1].Image != "http://img/1.jpg" {
+		t.Errorf("leaf Image = %q, want http://img/1.jpg", nodes[1].Image)
+	}
+	if nodes[0].Image != "" {
+		t.Errorf("directory Image = %q, want empty", nodes[0].Image)
+	}
+}
