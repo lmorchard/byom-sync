@@ -129,12 +129,11 @@ func runSync(ctx context.Context, args []string) error {
 				if err != nil {
 					return err
 				}
-				remote.DateCreated = local.DateCreated // preserve original creation date
-			} else {
-				remote.DateCreated = now.UTC()
 			}
+			remote.DateImported = importedDate(local, ok, now)
 
 			merged := playlist.Merge(local, remote, strat, now)
+			merged.RefreshDates()
 			savedPath, err := playlist.Save(dir, merged)
 			if err != nil {
 				return err
@@ -149,6 +148,17 @@ func runSync(ctx context.Context, args []string) error {
 	}
 	fmt.Printf("✅ Synced %d playlist(s) into %s\n", len(targets), dir)
 	return nil
+}
+
+// importedDate returns the "first seen" stamp to carry onto a synced playlist:
+// now for a brand-new playlist, otherwise the local file's DateImported —
+// migrating a pre-change file whose original stamp lived in DateCreated.
+func importedDate(local playlist.Playlist, existed bool, now time.Time) time.Time {
+	if !existed {
+		return now.UTC()
+	}
+	local.EnsureImportedDate()
+	return local.DateImported
 }
 
 func init() {

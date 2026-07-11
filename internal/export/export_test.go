@@ -34,6 +34,29 @@ func samplePlaylist() playlist.Playlist {
 	}
 }
 
+func TestJSPFExportNoPlaylistExtensionWhenDatesZero(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "out.jspf.json")
+	// samplePlaylist has zero DateUpdated/DateImported, so no playlist-level
+	// byom extension should be emitted.
+	if err := (JSPFExporter{}).Export(samplePlaylist(), out, nil); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(out)
+
+	var doc struct {
+		Playlist struct {
+			Extension map[string][]json.RawMessage `json:"extension"`
+		} `json:"playlist"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("unmarshal: %v\n%s", err, raw)
+	}
+	if len(doc.Playlist.Extension) != 0 {
+		t.Errorf("expected no playlist-level extension for zero dates, got: %v", doc.Playlist.Extension)
+	}
+}
+
 func TestM3U8Export(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out.m3u8")
@@ -158,7 +181,10 @@ func TestJSPFExport_ExplicitPlaylistImageWins(t *testing.T) {
 func TestMarkdownExport(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out.md")
-	if err := (MarkdownExporter{}).Export(samplePlaylist(), out, nil); err != nil {
+	p := samplePlaylist()
+	p.DateCreated = time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	p.DateUpdated = time.Date(2025, 6, 15, 0, 0, 0, 0, time.UTC)
+	if err := (MarkdownExporter{}).Export(p, out, nil); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := os.ReadFile(out)
@@ -169,6 +195,12 @@ func TestMarkdownExport(t *testing.T) {
 	}
 	if !strings.Contains(s, `title: "Road Trip"`) {
 		t.Errorf("frontmatter title missing:\n%s", s)
+	}
+	if !strings.Contains(s, `date: "2020-01-01"`) {
+		t.Errorf("frontmatter date should be date_created:\n%s", s)
+	}
+	if !strings.Contains(s, `updated: "2025-06-15"`) {
+		t.Errorf("frontmatter updated missing:\n%s", s)
 	}
 	// a table row per track
 	if !strings.Contains(s, "Song One") || !strings.Contains(s, "Artist A") || !strings.Contains(s, "Album X") {
@@ -352,5 +384,44 @@ func TestJSPFExport_NativeOmitsOrphanState(t *testing.T) {
 	}
 	if entry["resolved"].(map[string]any)["youtube"] != "MV_3Dpw-BRY" {
 		t.Errorf("resolved youtube id missing/incorrect: %v", entry)
+	}
+}
+
+func TestJSPFExportPlaylistDatesExtension(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "out.jspf.json")
+	p := samplePlaylist()
+	p.DateCreated = time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	p.DateUpdated = time.Date(2025, 6, 15, 12, 0, 0, 0, time.UTC)
+	p.DateImported = time.Date(2026, 7, 8, 0, 0, 0, 0, time.UTC)
+	if err := (JSPFExporter{}).Export(p, out, nil); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(out)
+
+	var doc struct {
+		Playlist struct {
+			Date      string `json:"date"`
+			Extension map[string][]struct {
+				DateUpdated  string `json:"date_updated"`
+				DateImported string `json:"date_imported"`
+			} `json:"extension"`
+		} `json:"playlist"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("unmarshal: %v\n%s", err, raw)
+	}
+	if doc.Playlist.Date != "2020-01-01T00:00:00Z" {
+		t.Errorf("playlist date should be date_created: got %q", doc.Playlist.Date)
+	}
+	ext := doc.Playlist.Extension["https://github.com/lmorchard/byom-sync"]
+	if len(ext) == 0 {
+		t.Fatalf("missing playlist-level byom extension:\n%s", raw)
+	}
+	if ext[0].DateUpdated != "2025-06-15T12:00:00Z" {
+		t.Errorf("date_updated: got %q", ext[0].DateUpdated)
+	}
+	if ext[0].DateImported != "2026-07-08T00:00:00Z" {
+		t.Errorf("date_imported: got %q", ext[0].DateImported)
 	}
 }

@@ -64,7 +64,8 @@ func runImport(inputPath string) error {
 	if importCreator != "" {
 		p.Creator = importCreator
 	}
-	p.DateCreated = time.Now().UTC()
+	p.DateImported = time.Now().UTC()
+	p.RefreshDates()
 
 	dir := importDir
 	if dir == "" {

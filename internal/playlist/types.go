@@ -18,10 +18,15 @@ type Playlist struct {
 	// Image is playlist-level cover art (a URL). When unset, exporters fall back
 	// to the first track's image.
 	Image string `yaml:"image,omitempty"`
-	// DateCreated is when byom-sync first synced this playlist. Spotify's API
-	// exposes no true playlist creation date, so this is "first seen" time; the
-	// per-track added_at fields carry the real curation history.
+	// DateImported is when byom-sync first saw this playlist (its original
+	// "first seen" time). Spotify's API exposes no true playlist creation date.
+	DateImported time.Time `yaml:"date_imported"`
+	// DateCreated is the earliest track added_at (start of curation); it falls
+	// back to DateImported when no track has a parseable added_at.
 	DateCreated time.Time `yaml:"date_created"`
+	// DateUpdated is the latest track added_at (most recent curation); it falls
+	// back to DateImported when no track has a parseable added_at.
+	DateUpdated time.Time `yaml:"date_updated"`
 	Tracks      []Track   `yaml:"tracks"`
 }
 
