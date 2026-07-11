@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 )
 
 // CAAClient fetches cover art metadata from the Cover Art Archive.
@@ -50,9 +51,18 @@ func (c *CAAClient) FrontImage(ctx context.Context, entity, mbid string) (string
 			continue
 		}
 		if u500 := img.Thumbnails["500"]; u500 != "" {
-			return u500, nil
+			return httpsURL(u500), nil
 		}
-		return img.Image, nil
+		return httpsURL(img.Image), nil
 	}
 	return "", nil
+}
+
+// httpsURL upgrades an http:// URL to https:// (Cover Art Archive serves https;
+// http URLs would be mixed-content-blocked in an https page).
+func httpsURL(u string) string {
+	if rest, ok := strings.CutPrefix(u, "http://"); ok {
+		return "https://" + rest
+	}
+	return u
 }

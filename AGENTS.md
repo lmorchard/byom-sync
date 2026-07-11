@@ -89,7 +89,8 @@ errcheck findings CI caught).
   (default) soft-orphans removed tracks (`spotify_present:false` +
   `date_orphaned`); `mirror` overwrites. Playlist selection: config `playlists`
   by default, positional args override, `--all` = all owned. Catalog-removed
-  stubs (empty title+artist) are filtered at fetch.
+  stubs (empty title+artist) are filtered at fetch. The `convert()` function also
+  captures album art into `Track.Image` from `Album.Images`.
 - **Native playlists:** a hub file with no `spotify_id` is a hand-authored
   ("native") playlist — just `title`/`creator`/`tracks`, where each track needs
   only `title` and `artist` (`album` optional). Provenance is *derived*, never
@@ -113,14 +114,17 @@ errcheck findings CI caught).
   equivalent — `resolve spotify` then skips it and clears any stale candidates.
   Recommended pipeline order:
   author/`sync` → `resolve spotify` → `resolve art` → `resolve youtube` → `export`.
-- **Cover art:** `Track.Image` (album cover URL) is populated by `resolve spotify`
-  (free from the Spotify search response) and, for gaps, by `resolve art`, which
-  queries MusicBrainz (release-group by artist+album, else recording by
-  artist+title) and stores the Cover Art Archive front image. `resolve art` fills
-  any track missing an image regardless of `spotify:false`, so off-Spotify tracks
-  get art. `Playlist.Image` is playlist-level art (falls back to the first track's
-  image at export). Pipeline: `resolve spotify` → `resolve art` → `resolve youtube`
-  → `export`.
+- **Cover art:** `Track.Image` (album cover URL) is populated by `sync` (album art
+  captured at fetch), `resolve spotify` (enrichment from Spotify search response),
+  or `resolve art` (MusicBrainz/Cover Art Archive fill). `resolve art` is Spotify-first:
+  a batched `GetTracks`-by-id pass fills art for tracks with a `spotify_id`, then
+  MusicBrainz (release-group by artist+album, else recording by artist+title)
+  fills remaining gaps. It degrades gracefully to MusicBrainz-only (with a warning)
+  when there's no Spotify token. CAA URLs are normalized to https. `resolve art`
+  fills any track missing an image regardless of `spotify:false`, so off-Spotify
+  tracks get art. `Playlist.Image` is playlist-level art (falls back to the first
+  track's image at export). Pipeline: `resolve spotify` → `resolve art` →
+  `resolve youtube` → `export`.
 - **Exporters:** m3u8 builds `{prefix}/{Artist}/{Album}/{Title}.{ext}` paths
   verbatim; jspf uses `urn:isrc:`/`urn:byom:` identifiers + `location`
   (spotify_url) + `image` (track and playlist cover art); markdown is frontmatter

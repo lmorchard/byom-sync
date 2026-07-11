@@ -14,9 +14,11 @@ import (
 	"github.com/lmorchard/byom-sync/internal/playlist"
 	"github.com/lmorchard/byom-sync/internal/rcache"
 	"github.com/lmorchard/byom-sync/internal/spotifyenrich"
+	"github.com/lmorchard/byom-sync/internal/spotifyfetch"
 	"github.com/lmorchard/byom-sync/internal/youtube"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/zmb3/spotify/v2"
 )
 
 var (
@@ -288,18 +290,38 @@ Typically run before 'resolve youtube' so downstream identity keys on ISRC.`,
 
 var resolveArtCmd = &cobra.Command{
 	Use:   "art",
-	Short: "Fill missing cover art from MusicBrainz + the Cover Art Archive",
+	Short: "Fill missing cover art (Spotify first, then MusicBrainz/Cover Art Archive)",
 	Long: `Find cover art for every hub track that has no image yet and write the URL
-into the YAML. Looks up MusicBrainz (release-group by artist+album when an album
-is present, else the recording by artist+title) and fetches the front cover from
-the Cover Art Archive. Public APIs — no key needed. Independent of spotify:false,
-so off-Spotify tracks get art too.
+into the YAML. Spotify-first: tracks with a spotify_id get their album art in a
+fast batched lookup by id (needs a token — run 'byom-sync auth'; without one this
+step is skipped with a warning). Tracks still missing art then fall back to
+MusicBrainz (release-group by artist+album when an album is present, else the
+recording by artist+title) → the Cover Art Archive front cover. Independent of
+spotify:false, so off-Spotify tracks get art too.
 
---limit caps tracks attempted per run; --delay paces MusicBrainz requests (its
-~1 req/sec policy).`,
+--limit and --delay bound only the MusicBrainz fallback pass (the Spotify pass is
+batched and unbounded): --limit caps tracks attempted there per run; --delay
+paces MusicBrainz requests (its ~1 req/sec policy).`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runResolveArt(context.Background())
 	},
+}
+
+// applyTrackArt fills Image for tracks that lack one and whose spotify_id has art
+// in artByID. Returns how many were filled.
+func applyTrackArt(p *playlist.Playlist, artByID map[string]string) int {
+	filled := 0
+	for i := range p.Tracks {
+		t := &p.Tracks[i]
+		if t.Image != "" || t.SpotifyID == "" {
+			continue
+		}
+		if url, ok := artByID[t.SpotifyID]; ok && url != "" {
+			t.Image = url
+			filled++
+		}
+	}
+	return filled
 }
 
 func runResolveArt(ctx context.Context) error {
@@ -314,6 +336,16 @@ func runResolveArt(ctx context.Context) error {
 	if len(paths) == 0 {
 		log.Warnf("no playlist YAML files found under %s — nothing to do", input)
 		return nil
+	}
+
+	// Spotify pass client (best art source). Optional: degrade to MusicBrainz-only
+	// when there's no token.
+	var spotClient *spotify.Client
+	if client, tok, aerr := auth.Client(ctx, viper.GetString("client_id"), viper.GetInt("redirect_port")); aerr != nil {
+		log.Warnf("no Spotify token (%v) — filling art from MusicBrainz only; run `byom-sync auth` for Spotify art", aerr)
+	} else {
+		spotClient = client
+		defer auth.PersistRefreshed(client, tok)
 	}
 
 	ua := viper.GetString("musicbrainz_user_agent")
@@ -346,46 +378,70 @@ func runResolveArt(ctx context.Context) error {
 		if lerr != nil {
 			return fmt.Errorf("load %s: %w", path, lerr)
 		}
-		need := countMissingArt(p)
-		base := filepath.Base(path)
-		if need == 0 {
-			log.Infof("%s: all tracks have art (%d tracks)", base, len(p.Tracks))
+		if countMissingArt(p) == 0 {
+			log.Infof("%s: all tracks have art (%d tracks)", filepath.Base(path), len(p.Tracks))
 			continue
 		}
-		log.Infof("%s: %d of %d tracks need art", base, need, len(p.Tracks))
+		base := filepath.Base(path)
 
-		var got, missed int
-		report := func(e coverart.Event) {
-			switch e.Kind {
-			case coverart.KindFilled:
-				got++
-				log.Debugf("  art: %s - %s -> %s (via %s)", e.Artist, e.Title, e.ImageURL, e.Source)
-			case coverart.KindMiss:
-				missed++
-				log.Debugf("  no art: %s - %s", e.Artist, e.Title)
-			case coverart.KindError:
-				log.Warnf("  error: %s - %s: %v", e.Artist, e.Title, e.Err)
+		// Spotify pass: batch-fetch album art by id for imageless tracks.
+		spot := 0
+		if spotClient != nil {
+			var ids []string
+			for _, t := range p.Tracks {
+				if t.Image == "" && t.SpotifyID != "" {
+					ids = append(ids, t.SpotifyID)
+				}
+			}
+			if len(ids) > 0 {
+				artByID, ferr := spotifyfetch.FetchTrackArt(ctx, spotClient, ids, spotifyfetch.DefaultImageMaxWidth)
+				if ferr != nil {
+					return fmt.Errorf("spotify art %s: %w", path, ferr)
+				}
+				spot = applyTrackArt(&p, artByID)
 			}
 		}
 
-		opts := coverart.Options{
-			Budget:  budget,
-			Pace:    artDelay,
-			Report:  report,
-			MissTTL: missTTL,
+		// MusicBrainz pass: fill whatever still lacks art.
+		need := countMissingArt(p)
+		var got, missed int
+		if need > 0 {
+			log.Infof("%s: %d from Spotify; %d remaining for MusicBrainz", base, spot, need)
+			report := func(e coverart.Event) {
+				switch e.Kind {
+				case coverart.KindFilled:
+					got++
+					log.Debugf("  art: %s - %s -> %s (via %s)", e.Artist, e.Title, e.ImageURL, e.Source)
+				case coverart.KindMiss:
+					missed++
+					log.Debugf("  no art: %s - %s", e.Artist, e.Title)
+				case coverart.KindError:
+					log.Warnf("  error: %s - %s: %v", e.Artist, e.Title, e.Err)
+				}
+			}
+			opts := coverart.Options{Budget: budget, Pace: artDelay, Report: report, MissTTL: missTTL}
+			if cache != nil {
+				opts.Cache = cache
+			}
+			// got is tallied solely from the report events (KindFilled) above; the
+			// return value here is used only to detect a resolve error, not counted
+			// again, to avoid double-counting fills.
+			_, rerr := coverart.Resolve(ctx, resolver, &p, opts)
+			if rerr != nil {
+				if serr := playlist.SaveFile(path, p); serr != nil {
+					return fmt.Errorf("save %s: %w", path, serr)
+				}
+				return fmt.Errorf("resolve art %s: %w", path, rerr)
+			}
+		} else {
+			log.Infof("%s: %d filled from Spotify (none left for MusicBrainz)", base, spot)
 		}
-		if cache != nil {
-			opts.Cache = cache
-		}
-		n, rerr := coverart.Resolve(ctx, resolver, &p, opts)
+
 		if serr := playlist.SaveFile(path, p); serr != nil {
 			return fmt.Errorf("save %s: %w", path, serr)
 		}
-		if rerr != nil {
-			return fmt.Errorf("resolve art %s: %w", path, rerr)
-		}
-		log.Infof("%s: %d art filled, %d no-art", base, got, missed)
-		total += n
+		total += spot + got
+		log.Infof("%s: %d art filled (%d Spotify, %d MusicBrainz), %d no-art", base, spot+got, spot, got, missed)
 		if budget != nil && *budget <= 0 {
 			log.Warnf("art limit reached — stopping (progress saved)")
 			break
@@ -727,7 +783,7 @@ func init() {
 
 	resolveCmd.AddCommand(resolveArtCmd)
 	resolveArtCmd.Flags().StringVar(&artInput, "input", "", "hub YAML file or directory (default: config dir)")
-	resolveArtCmd.Flags().IntVar(&artLimit, "limit", 0, "max tracks attempted this run (0 = unlimited)")
+	resolveArtCmd.Flags().IntVar(&artLimit, "limit", 0, "max tracks attempted in the MusicBrainz fallback pass (0 = unlimited; Spotify pass is unbounded)")
 	resolveArtCmd.Flags().DurationVar(&artDelay, "delay", 1100*time.Millisecond, "pause between MusicBrainz lookups (~1 req/sec policy)")
 	resolveArtCmd.Flags().BoolVar(&artNoCache, "no-cache", false, "bypass the art cache")
 
