@@ -1,6 +1,9 @@
 package site
 
-import "os"
+import (
+	"fmt"
+	"os"
+)
 
 // Options configures a site build.
 type Options struct {
@@ -8,6 +11,22 @@ type Options struct {
 	OutDir   string
 	PagesDir string
 	Site     SiteMeta
+}
+
+// checkSlugCollisions returns an error if any content-page slug matches a
+// top-level playlist/folder slug — both render to <out>/<slug>/index.html, so a
+// collision would silently overwrite the playlist/folder page.
+func checkSlugCollisions(root *Node, pages []ContentPage) error {
+	top := make(map[string]bool, len(root.Children))
+	for _, c := range root.Children {
+		top[c.Name] = true
+	}
+	for _, p := range pages {
+		if top[p.Slug] {
+			return fmt.Errorf("content page %q collides with a top-level playlist/folder of the same slug; rename one", p.Slug)
+		}
+	}
+	return nil
 }
 
 // Build compiles the hub at opts.HubDir into a static site at opts.OutDir.
@@ -24,6 +43,9 @@ func Build(opts Options) error {
 		return err
 	}
 	opts.Site.Pages = pageLinks(pages)
+	if err := checkSlugCollisions(root, pages); err != nil {
+		return err
+	}
 	r, err := NewRenderer(opts.Site)
 	if err != nil {
 		return err

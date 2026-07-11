@@ -51,3 +51,13 @@ func TestBuildEndToEnd(t *testing.T) {
 		t.Error("playlist page header should link the content page")
 	}
 }
+
+func TestCheckSlugCollisions(t *testing.T) {
+	root := &Node{IsDir: true, Children: []*Node{{Name: "about", IsDir: true}}}
+	if err := checkSlugCollisions(root, []ContentPage{{Slug: "about"}}); err == nil {
+		t.Error("expected collision error for matching slug")
+	}
+	if err := checkSlugCollisions(root, []ContentPage{{Slug: "colophon"}}); err != nil {
+		t.Errorf("unexpected error for non-colliding slug: %v", err)
+	}
+}
