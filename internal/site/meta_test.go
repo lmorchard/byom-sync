@@ -28,10 +28,10 @@ func TestMetaHelpers(t *testing.T) {
 	p := &playlist.Playlist{Tracks: []playlist.Track{
 		{Title: "A"}, {Title: "B", Image: "http://img/b.jpg"},
 	}}
-	if got := playlistImage(p); got != "http://img/b.jpg" {
+	if got := playlistImage(p, "https://site.example"); got != "http://img/b.jpg" {
 		t.Errorf("playlistImage = %q", got)
 	}
-	if got := playlistImage(&playlist.Playlist{}); got != "" {
+	if got := playlistImage(&playlist.Playlist{}, "https://site.example"); got != "" {
 		t.Errorf("empty playlistImage = %q, want empty", got)
 	}
 	if got := firstParagraph("# Heading\n\nBody text here.\n"); got != "Heading" {
@@ -42,6 +42,20 @@ func TestMetaHelpers(t *testing.T) {
 	}
 	if got := canonical("https://x.test/", ""); got != "https://x.test/" {
 		t.Errorf("root canonical = %q", got)
+	}
+}
+
+func TestPlaylistImage_PrefersDeployedLocalArt(t *testing.T) {
+	p := &playlist.Playlist{Tracks: []playlist.Track{
+		{Title: "A", Image: "https://x/c.jpg", ImageFile: "art/ab/abcd.jpg"},
+	}}
+	if got := playlistImage(p, "https://site.example"); got != "https://site.example/art/ab/abcd.jpg" {
+		t.Errorf("OG image should use base+image_file: %q", got)
+	}
+	// no local copy → source URL
+	q := &playlist.Playlist{Tracks: []playlist.Track{{Title: "B", Image: "https://x/d.jpg"}}}
+	if got := playlistImage(q, "https://site.example"); got != "https://x/d.jpg" {
+		t.Errorf("no local copy → source URL: %q", got)
 	}
 }
 

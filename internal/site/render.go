@@ -193,7 +193,7 @@ func (r *Renderer) renderPlaylist(outDir string, node *Node, crumbs []Crumb) err
 		Site:      r.Site,
 		Title:     node.Title,
 		Desc:      node.Playlist.Description,
-		Image:     playlistImage(node.Playlist),
+		Image:     playlistImage(node.Playlist, r.Site.BaseURL),
 		Canonical: canonical(r.Site.BaseURL, node.Path),
 		Crumbs:    crumbs,
 	}

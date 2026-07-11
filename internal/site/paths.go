@@ -32,13 +32,15 @@ func walkPlaylists(root *Node, fn func(*Node) error) error {
 }
 
 // WriteJSPF writes a playlist.jspf.json next to each playlist page, reusing the
-// tested JSPF exporter.
-func WriteJSPF(outDir string, root *Node) error {
+// tested JSPF exporter. baseURL is passed through as art_base so the exporter
+// can point image_file entries at the deployed local art.
+func WriteJSPF(outDir string, root *Node, baseURL string) error {
 	return walkPlaylists(root, func(n *Node) error {
 		dir := pageDir(outDir, n)
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
 		}
-		return export.JSPFExporter{}.Export(*n.Playlist, filepath.Join(dir, "playlist.jspf.json"), nil)
+		return export.JSPFExporter{}.Export(*n.Playlist, filepath.Join(dir, "playlist.jspf.json"),
+			map[string]string{"art_base": baseURL})
 	})
 }

@@ -48,7 +48,7 @@ func Build(opts Options) error {
 	if err != nil {
 		return err
 	}
-	if err := WriteJSPF(opts.OutDir, root); err != nil {
+	if err := WriteJSPF(opts.OutDir, root, opts.Site.BaseURL); err != nil {
 		return err
 	}
 	if err := WriteIndexJSON(opts.OutDir, root); err != nil {
