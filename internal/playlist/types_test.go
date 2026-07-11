@@ -200,3 +200,18 @@ func TestPlaylist_ImageRoundTrip(t *testing.T) {
 		}
 	}
 }
+
+func TestTrack_ImageFileRoundTrip(t *testing.T) {
+	data, err := yaml.Marshal(Track{Title: "T", Artist: "A", Image: "https://x/c.jpg", ImageFile: "art/ab/abcd.jpg"})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(data), "image_file: art/ab/abcd.jpg") {
+		t.Errorf("image_file not serialized:\n%s", data)
+	}
+	// omitempty: absent when unset
+	bare, _ := yaml.Marshal(Track{Title: "T", Artist: "A"})
+	if strings.Contains(string(bare), "image_file:") {
+		t.Errorf("bare track should omit image_file:\n%s", bare)
+	}
+}
