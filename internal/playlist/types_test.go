@@ -175,3 +175,20 @@ func TestTrack_EnrichFieldsRoundTrip(t *testing.T) {
 		t.Errorf("bare track should omit image/enrich_candidates:\n%s", s)
 	}
 }
+
+func TestPlaylist_ImageRoundTrip(t *testing.T) {
+	data, err := yaml.Marshal(Playlist{Title: "T", Image: "https://img/pl.jpg"})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(data), "image: https://img/pl.jpg") {
+		t.Errorf("playlist image not serialized:\n%s", data)
+	}
+	// omitempty: no image -> no image key at the playlist level
+	bare, _ := yaml.Marshal(Playlist{Title: "T"})
+	for _, line := range strings.Split(string(bare), "\n") {
+		if strings.HasPrefix(line, "image:") {
+			t.Errorf("bare playlist should omit image:\n%s", bare)
+		}
+	}
+}

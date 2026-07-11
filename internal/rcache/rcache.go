@@ -61,6 +61,10 @@ func Open(path string) (*DB, error) {
 		_ = db.Close()
 		return nil, err
 	}
+	if _, err := db.Exec(artSchema); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
 	return &DB{db: db}, nil
 }
 
@@ -149,9 +153,9 @@ func (d *DB) Stats(missCutoff time.Time) (Stats, error) {
 	return s, nil
 }
 
-// Clear deletes cache entries across both the resolution and enrichment tables.
-// With missesOnly, only negative entries (empty id) are removed. Returns the
-// total number of rows deleted.
+// Clear deletes cache entries across the resolution, enrichment, and art
+// tables. With missesOnly, only negative entries (empty id) are removed.
+// Returns the total number of rows deleted.
 func (d *DB) Clear(missesOnly bool) (int64, error) {
 	var total int64
 	del := func(table, idCol string) (int64, error) {
@@ -175,5 +179,10 @@ func (d *DB) Clear(missesOnly bool) (int64, error) {
 		return total, err
 	}
 	total += n2
+	n3, err := del("art_cache", "image_url")
+	if err != nil {
+		return total, err
+	}
+	total += n3
 	return total, nil
 }
