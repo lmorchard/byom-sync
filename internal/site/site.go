@@ -48,6 +48,9 @@ func Build(opts Options) error {
 	if err != nil {
 		return err
 	}
+	if err := GenerateMosaics(opts.HubDir, opts.OutDir, root); err != nil {
+		return err
+	}
 	if err := WriteJSPF(opts.OutDir, root, opts.Site.BaseURL); err != nil {
 		return err
 	}
