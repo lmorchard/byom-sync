@@ -28,7 +28,7 @@ func samplePlaylist() playlist.Playlist {
 		Creator:     "Les",
 		DateCreated: time.Date(2026, 7, 7, 0, 0, 0, 0, time.UTC),
 		Tracks: []playlist.Track{
-			{Title: "Song One", Artist: "Artist A", Album: "Album X", ISRC: "GBA098000010", SpotifyID: "track123", SpotifyURL: "https://open.spotify.com/track/track123", DurationMS: 354000, AddedAt: "2026-05-29T04:02:20Z", SyncState: playlist.SyncState{SpotifyPresent: true}},
+			{Title: "Song One", Artist: "Artist A", Album: "Album X", ISRC: "GBA098000010", SpotifyID: "track123", SpotifyURL: "https://open.spotify.com/track/track123", DurationMS: 354000, AddedAt: "2026-05-29T04:02:20Z", Image: "https://img/song-one.jpg", SyncState: playlist.SyncState{SpotifyPresent: true}},
 			{Title: "Song Two", Artist: "Artist B", Album: "Album Y", DurationMS: 200000, SyncState: playlist.SyncState{SpotifyPresent: false, DateOrphaned: "2026-01-01T00:00:00Z"}},
 		},
 	}
@@ -147,6 +147,34 @@ func TestJSPFExport(t *testing.T) {
 	// track with no spotify_url omits location
 	if _, present := t1["location"]; present {
 		t.Errorf("location should be omitted when spotify_url empty: %v", t1)
+	}
+
+	// track image emitted from Track.Image
+	if t0["image"] != "https://img/song-one.jpg" {
+		t.Errorf("track image not emitted: %v", t0["image"])
+	}
+	// playlist image falls back to the first track's image when unset
+	if pl["image"] != "https://img/song-one.jpg" {
+		t.Errorf("playlist image should fall back to first track image: %v", pl["image"])
+	}
+}
+
+func TestJSPFExport_ExplicitPlaylistImageWins(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "pi.jspf")
+	p := samplePlaylist() // first track has Image https://img/song-one.jpg
+	p.Image = "https://img/playlist-explicit.jpg"
+	if err := (JSPFExporter{}).Export(p, out, nil); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(out)
+	var doc map[string]any
+	if err := json.Unmarshal(got, &doc); err != nil {
+		t.Fatalf("output is not valid JSON: %v", err)
+	}
+	pl := doc["playlist"].(map[string]any)
+	if pl["image"] != "https://img/playlist-explicit.jpg" {
+		t.Errorf("explicit Playlist.Image should win over the first-track fallback: %v", pl["image"])
 	}
 }
 

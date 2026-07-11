@@ -23,6 +23,7 @@ type jspfPlaylist struct {
 	Title     string                       `json:"title,omitempty"`
 	Creator   string                       `json:"creator,omitempty"`
 	Date      string                       `json:"date,omitempty"`
+	Image     string                       `json:"image,omitempty"`
 	Extension map[string][]jspfPlaylistExt `json:"extension,omitempty"`
 	Track     []jspfTrack                  `json:"track"`
 }
@@ -31,6 +32,7 @@ type jspfTrack struct {
 	Title      string               `json:"title,omitempty"`
 	Creator    string               `json:"creator,omitempty"`
 	Album      string               `json:"album,omitempty"`
+	Image      string               `json:"image,omitempty"`
 	Duration   int                  `json:"duration,omitempty"`
 	Identifier []string             `json:"identifier,omitempty"`
 	Location   []string             `json:"location,omitempty"`
@@ -75,6 +77,8 @@ func (JSPFExporter) Export(p playlist.Playlist, outputPath string, _ map[string]
 		doc.Playlist.Date = p.DateCreated.UTC().Format("2006-01-02T15:04:05Z")
 	}
 
+	doc.Playlist.Image = playlistImage(p)
+
 	var pext jspfPlaylistExt
 	if !p.DateUpdated.IsZero() {
 		pext.DateUpdated = p.DateUpdated.UTC().Format("2006-01-02T15:04:05Z")
@@ -91,6 +95,7 @@ func (JSPFExporter) Export(p playlist.Playlist, outputPath string, _ map[string]
 			Title:    t.Title,
 			Creator:  t.Artist,
 			Album:    t.Album,
+			Image:    t.Image,
 			Duration: (t.DurationMS + 500) / 1000, // round to nearest second
 		}
 		if t.ISRC != "" {
@@ -134,4 +139,18 @@ func (JSPFExporter) Export(p playlist.Playlist, outputPath string, _ map[string]
 func byomID(t playlist.Track) string {
 	sum := sha1.Sum([]byte(t.ContentKey()))
 	return hex.EncodeToString(sum[:])
+}
+
+// playlistImage returns the playlist's own image, or the first track's image as
+// a fallback so a playlist still has cover art when none was set explicitly.
+func playlistImage(p playlist.Playlist) string {
+	if p.Image != "" {
+		return p.Image
+	}
+	for _, t := range p.Tracks {
+		if t.Image != "" {
+			return t.Image
+		}
+	}
+	return ""
 }

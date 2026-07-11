@@ -12,6 +12,7 @@ var (
 	siteInput   string
 	siteOut     string
 	siteBaseURL string
+	sitePages   string
 )
 
 var siteCmd = &cobra.Command{
@@ -42,10 +43,15 @@ func runSite(_ *cobra.Command, _ []string) error {
 	if baseURL == "" {
 		return fmt.Errorf("site: base_url is required (set site.base_url or pass --base-url)")
 	}
+	pagesDir := sitePages
+	if pagesDir == "" {
+		pagesDir = viper.GetString("site.pages_dir")
+	}
 
 	return site.Build(site.Options{
-		HubDir: hub,
-		OutDir: out,
+		HubDir:   hub,
+		OutDir:   out,
+		PagesDir: pagesDir,
 		Site: site.SiteMeta{
 			Title:                 viper.GetString("site.title"),
 			BaseURL:               baseURL,
@@ -63,4 +69,5 @@ func init() {
 	siteCmd.Flags().StringVar(&siteInput, "input", "", "hub directory (default: config `dir`)")
 	siteCmd.Flags().StringVar(&siteOut, "out", "", "output directory (default: config `site.out_dir`)")
 	siteCmd.Flags().StringVar(&siteBaseURL, "base-url", "", "site base URL (default: config `site.base_url`)")
+	siteCmd.Flags().StringVar(&sitePages, "pages", "", "content-pages directory (default: config `site.pages_dir`)")
 }

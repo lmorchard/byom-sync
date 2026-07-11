@@ -1,3 +1,10 @@
+{{define "siteheader"}}
+<header class="site-header">
+<a class="site-title" href="/">{{.Site.Title}}</a>
+{{if .Site.Pages}}<nav class="page-nav">{{range .Site.Pages}}<a href="{{.Href}}">{{.Title}}</a>{{end}}</nav>{{end}}
+</header>
+{{end}}
+
 {{define "head"}}
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">

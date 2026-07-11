@@ -1,6 +1,7 @@
 package site
 
 import (
+	"html/template"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,7 +21,9 @@ func TestRenderSite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := NewRenderer(testSite())
+	site := testSite()
+	site.Pages = []PageLink{{Title: "About", Href: "/about/"}, {Title: "Colophon", Href: "/colophon/"}}
+	r, err := NewRenderer(site)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,6 +76,16 @@ func TestRenderSite(t *testing.T) {
 		t.Error("playlist page missing OG tags")
 	}
 	embed := read("synthpop/bleep-bloop-bop/embed/index.html")
+	// Header nav: content-page links appear, in order, on interior + landing.
+	if i := strings.Index(pl, `href="/about/"`); i < 0 || strings.Index(pl, `href="/colophon/"`) < i {
+		t.Error("playlist header missing content-page nav in order")
+	}
+	if !strings.Contains(landing, `<nav class="page-nav">`) || !strings.Contains(landing, `href="/about/"`) {
+		t.Error("landing header missing content-page nav")
+	}
+	if strings.Contains(embed, `class="page-nav"`) {
+		t.Error("embed page must not carry the header nav")
+	}
 	if !strings.Contains(embed, "<byom-player") || strings.Contains(embed, "<byom-site-nav>") {
 		t.Error("embed should have player but no site nav")
 	}
@@ -82,5 +95,39 @@ func TestRenderSite(t *testing.T) {
 	folder := read("synthpop/index.html")
 	if !strings.Contains(folder, "Synthpop picks") {
 		t.Error("folder page missing README intro")
+	}
+}
+
+func TestRenderPages(t *testing.T) {
+	site := testSite()
+	site.Pages = []PageLink{{Title: "About", Href: "/about/"}}
+	r, err := NewRenderer(site)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := t.TempDir()
+	pages := []ContentPage{{
+		Slug: "about", Title: "About", Desc: "Who I am.",
+		Body: template.HTML("<p>Hello <strong>world</strong>.</p>"),
+	}}
+	if err := r.RenderPages(out, pages); err != nil {
+		t.Fatalf("RenderPages: %v", err)
+	}
+	b, err := os.ReadFile(filepath.Join(out, "pages", "about", "index.html"))
+	if err != nil {
+		t.Fatalf("about page: %v", err)
+	}
+	s := string(b)
+	if !strings.Contains(s, "<strong>world</strong>") {
+		t.Error("page body not rendered")
+	}
+	if !strings.Contains(s, `<nav class="page-nav">`) {
+		t.Error("page missing header nav")
+	}
+	if !strings.Contains(s, `property="og:title" content="About"`) {
+		t.Error("page missing OG title")
+	}
+	if !strings.Contains(s, `href="https://mix.test/pages/about/"`) {
+		t.Error("page missing canonical URL")
 	}
 }

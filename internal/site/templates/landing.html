@@ -2,7 +2,7 @@
 <html lang="en">
 <head>{{template "head" .}}</head>
 <body class="landing">
-<header class="site-header"><h1>{{.Site.Title}}</h1></header>
+{{template "siteheader" .}}
 <main>
 {{if .Intro}}<section class="intro">{{.Intro}}</section>{{end}}
 <section class="tree">{{template "treeList" .Root.Children}}</section>

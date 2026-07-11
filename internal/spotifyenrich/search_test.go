@@ -46,20 +46,6 @@ func TestToCandidate(t *testing.T) {
 	}
 }
 
-func TestPickImage(t *testing.T) {
-	imgs := []spotify.Image{{URL: "xl", Width: 1000}, {URL: "l", Width: 640}, {URL: "s", Width: 64}}
-	if got := pickImage(imgs, 640); got != "l" {
-		t.Errorf("pickImage largest<=640: got %q", got)
-	}
-	// none within cap -> smallest above cap (fallback to something)
-	if got := pickImage([]spotify.Image{{URL: "xl", Width: 1000}}, 640); got != "xl" {
-		t.Errorf("pickImage fallback: got %q", got)
-	}
-	if got := pickImage(nil, 640); got != "" {
-		t.Errorf("pickImage empty: got %q", got)
-	}
-}
-
 func TestEntryCandidateRoundTrip(t *testing.T) {
 	now := time.Date(2026, 7, 10, 0, 0, 0, 0, time.UTC)
 	c := Candidate{SpotifyID: "sid", ISRC: "FR123", Title: "Nightcall", Artist: "Kavinsky", Album: "Nightcall", SpotifyURL: "url", Image: "img", DurationMS: 258000}

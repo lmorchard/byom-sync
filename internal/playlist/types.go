@@ -15,6 +15,9 @@ type Playlist struct {
 	Title       string `yaml:"title"`
 	Creator     string `yaml:"creator"`
 	Description string `yaml:"description,omitempty"`
+	// Image is playlist-level cover art (a URL). When unset, exporters fall back
+	// to the first track's image.
+	Image string `yaml:"image,omitempty"`
 	// DateImported is when byom-sync first saw this playlist (its original
 	// "first seen" time). Spotify's API exposes no true playlist creation date.
 	DateImported time.Time `yaml:"date_imported"`

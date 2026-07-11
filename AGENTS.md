@@ -23,7 +23,7 @@ YouTube resolution cache in `internal/rcache/` — an index, not a source of tru
 ## Layout
 
 - `cmd/` — Cobra commands: `root`, `version`, `init`, `auth`, `sync`, `import`,
-  `export`, `resolve` (subcommands `youtube`, `spotify`, `prime`, `cache stats`,
+  `export`, `resolve` (subcommands `youtube`, `spotify`, `art`, `prime`, `cache stats`,
   `cache clear`), `site`, `dates`.
 - `internal/playlist/` — the hub: `types.go` (`Playlist`/`Track`/`SyncState`,
   `Track.Key()`), `store.go` (`Load`/`LoadFile`/`FindFileByID`/`Save`/`Slug`),
@@ -43,15 +43,23 @@ YouTube resolution cache in `internal/rcache/` — an index, not a source of tru
   `toCandidate`, image pick), `enrich.go` (`Enrich` loop, `Options`, `Event`,
   `Cache`, `applyCandidate`). Fills empty technical fields on confident matches;
   writes `enrich_candidates` for ambiguous ones.
-- `internal/rcache/` — SQLite cache with two tables in one `cache.db`:
-  `resolution_cache` (YouTube: `Entry`, `Get`/`Put`) and `enrichment_cache`
-  (Spotify: `EnrichEntry`, `GetEnrich`/`PutEnrich`). `Stats`/`EnrichStats`/`Clear`
-  span both; keyed by `Track.Key()`; gitignored, disposable.
+- `internal/coverart/` — cover-art resolution: `musicbrainz.go` (`MBClient`:
+  release-group + recording search), `coverartarchive.go` (`CAAClient`: front
+  image for a release/release-group MBID), `resolver.go` (`Resolver`/`Arter`,
+  album-first then recording fallback), `resolve.go` (`Resolve` loop, `Options`,
+  `Event`, `Cache`). Public APIs, no key; MusicBrainz needs a User-Agent + ~1
+  req/sec pacing.
+- `internal/rcache/` — SQLite cache with three tables in one `cache.db`:
+  `resolution_cache` (YouTube), `enrichment_cache` (Spotify), and `art_cache`
+  (cover art: `ArtEntry`, `GetArt`/`PutArt`). `Stats`/`EnrichStats`/`ArtStats`
+  and `Clear` span all three; keyed by `Track.Key()`; gitignored, disposable.
 - `internal/config/`, `internal/templates/` (embedded Markdown template).
 - `internal/site/` — the static site generator (`byom-sync site`): recursive
   hub walk → per-playlist JSPF + HTML pages embedding `<byom-player>`,
   `site-index.json` + `<byom-site-nav>`, OG metadata, RSS. Reuses
-  `export.JSPFExporter`.
+  `export.JSPFExporter`. Content pages (`site.pages_dir`, default `./pages`):
+  `*.md` with YAML frontmatter (`title`/`order`) → `/pages/<slug>/` pages linked in the
+  header.
 
 ## Commands (Makefile-first)
 
@@ -82,7 +90,8 @@ errcheck findings CI caught).
   (default) soft-orphans removed tracks (`spotify_present:false` +
   `date_orphaned`); `mirror` overwrites. Playlist selection: config `playlists`
   by default, positional args override, `--all` = all owned. Catalog-removed
-  stubs (empty title+artist) are filtered at fetch.
+  stubs (empty title+artist) are filtered at fetch. The `convert()` function also
+  captures album art into `Track.Image` from `Album.Images`.
 - **Dates:** three playlist-level fields. `date_imported` is when byom-sync first
   saw the playlist (Spotify exposes no true creation date); `date_created` and
   `date_updated` are the earliest and latest track `added_at` (all tracks,
@@ -114,18 +123,28 @@ errcheck findings CI caught).
   absent/`true` = enrich, `false` = opt out) to assert it has no Spotify
   equivalent — `resolve spotify` then skips it and clears any stale candidates.
   Recommended pipeline order:
-  author/`sync` → `resolve spotify` → `resolve youtube` → `export`, so YouTube
-  resolution and its cache are keyed on the enriched ISRC (`Track.Key()` is
-  ISRC-first).
+  author/`sync` → `resolve spotify` → `resolve art` → `resolve youtube` → `export`.
+- **Cover art:** `Track.Image` (album cover URL) is populated by `sync` (album art
+  captured at fetch), `resolve spotify` (enrichment from Spotify search response),
+  or `resolve art` (MusicBrainz/Cover Art Archive fill). `resolve art` is Spotify-first:
+  a batched `GetTracks`-by-id pass fills art for tracks with a `spotify_id`, then
+  MusicBrainz (release-group by artist+album, else recording by artist+title)
+  fills remaining gaps. It degrades gracefully to MusicBrainz-only (with a warning)
+  when there's no Spotify token. CAA URLs are normalized to https. `resolve art`
+  fills any track missing an image regardless of `spotify:false`, so off-Spotify
+  tracks get art. `Playlist.Image` is playlist-level art (falls back to the first
+  track's image at export). Pipeline: `resolve spotify` → `resolve art` →
+  `resolve youtube` → `export`.
 - **Exporters:** m3u8 builds `{prefix}/{Artist}/{Album}/{Title}.{ext}` paths
   verbatim; jspf uses `urn:isrc:` identifiers (or a synthesized
   `urn:byom:<sha1(ContentKey)>` when a track has no ISRC, so every track is
-  addressable) + `location` (spotify_url); markdown is frontmatter + tracklist
-  table via the embedded, init-overridable template. Playlist `date_created` maps
-  to the JSPF `date` and markdown `date`; `date_updated`/`date_imported` ride a
-  playlist-level byom extension in JSPF (namespace
-  `https://github.com/lmorchard/byom-sync`), and `date_updated` also appears as
-  markdown `updated`. (byom-player does not yet read the playlist-level extension.)
+  addressable) + `location` (spotify_url) + `image` (track and playlist cover
+  art); markdown is frontmatter + tracklist table via the embedded,
+  init-overridable template. Playlist `date_created` maps to the JSPF `date` and
+  markdown `date`; `date_updated`/`date_imported` ride a playlist-level byom
+  extension in JSPF (namespace `https://github.com/lmorchard/byom-sync`), and
+  `date_updated` also appears as markdown `updated`. (byom-player does not yet
+  read the playlist-level date extension.)
 
 ## CI / release
 
