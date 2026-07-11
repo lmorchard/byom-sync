@@ -22,10 +22,13 @@
 {{end}}
 {{range yearGroupsOf $children}}
 <h2 class="year">{{.Label}}</h2>
-<ul class="tree-list">
+<div class="playlist-cards">
 {{range .Playlists}}
-  <li class="leaf"><a href="/{{.Path}}/">{{.Title}}</a> <span class="meta">— {{playlistMeta .Playlist}}</span></li>
+  <a class="playlist-card" href="/{{.Path}}/">
+    {{with playlistCover .Playlist}}<img class="cover" src="{{.}}" alt="" loading="lazy">{{else}}<span class="cover placeholder"></span>{{end}}
+    <span class="body"><span class="title">{{.Title}}</span><span class="meta">{{playlistMeta .Playlist}}</span>{{if .Playlist.Description}}<span class="blurb">{{.Playlist.Description}}</span>{{end}}</span>
+  </a>
 {{end}}
-</ul>
+</div>
 {{end}}
 {{end}}
