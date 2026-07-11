@@ -19,6 +19,28 @@ func playlistImage(p *playlist.Playlist) string {
 	return ""
 }
 
+// siteCover resolves how a playlist's cover is referenced on the site. It
+// prefers a downloaded local copy (returned as a root-relative /art/... href
+// plus the hub-relative source path to copy) and falls back to a remote URL.
+// href is what pages/JSON link to; local is non-empty only when the cover is
+// self-hosted and must be copied into the output.
+func siteCover(p *playlist.Playlist) (href, local string) {
+	if p.Image != "" {
+		return p.Image, ""
+	}
+	for _, t := range p.Tracks {
+		if t.ImageFile != "" {
+			return "/" + t.ImageFile, t.ImageFile
+		}
+	}
+	for _, t := range p.Tracks {
+		if t.Image != "" {
+			return t.Image, ""
+		}
+	}
+	return "", ""
+}
+
 // firstParagraph returns the first non-empty line of markdown with any leading
 // heading marker/space trimmed — a cheap meta-description fallback.
 func firstParagraph(md string) string {

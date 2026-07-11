@@ -66,3 +66,40 @@ func TestDateRange(t *testing.T) {
 		}
 	}
 }
+
+func TestSiteCover(t *testing.T) {
+	cases := []struct {
+		name             string
+		p                *playlist.Playlist
+		wantHref, wantLo string
+	}{
+		{
+			name:     "playlist-level image is remote",
+			p:        &playlist.Playlist{Image: "http://img/pl.jpg", Tracks: []playlist.Track{{ImageFile: "art/aa/x.jpg"}}},
+			wantHref: "http://img/pl.jpg", wantLo: "",
+		},
+		{
+			name:     "prefers first track local file over an earlier remote",
+			p:        &playlist.Playlist{Tracks: []playlist.Track{{Image: "http://img/0.jpg"}, {ImageFile: "art/bb/y.jpg"}}},
+			wantHref: "/art/bb/y.jpg", wantLo: "art/bb/y.jpg",
+		},
+		{
+			name:     "falls back to first remote when no local exists",
+			p:        &playlist.Playlist{Tracks: []playlist.Track{{}, {Image: "http://img/2.jpg"}}},
+			wantHref: "http://img/2.jpg", wantLo: "",
+		},
+		{
+			name:     "nothing available",
+			p:        &playlist.Playlist{Tracks: []playlist.Track{{}}},
+			wantHref: "", wantLo: "",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			href, lo := siteCover(tc.p)
+			if href != tc.wantHref || lo != tc.wantLo {
+				t.Errorf("siteCover = (%q,%q), want (%q,%q)", href, lo, tc.wantHref, tc.wantLo)
+			}
+		})
+	}
+}
