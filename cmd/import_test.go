@@ -54,8 +54,12 @@ func TestRunImport_WritesNativePlaylist(t *testing.T) {
 	if len(p.Tracks) != 2 || p.Tracks[0].Artist != "A" || p.Tracks[0].Title != "One" {
 		t.Errorf("tracks: %+v", p.Tracks)
 	}
-	if p.DateCreated.IsZero() {
-		t.Errorf("date_created should be stamped")
+	if p.DateImported.IsZero() {
+		t.Errorf("date_imported should be stamped")
+	}
+	if !p.DateCreated.Equal(p.DateImported) || !p.DateUpdated.Equal(p.DateImported) {
+		t.Errorf("native created/updated should fall back to imported: imported=%v created=%v updated=%v",
+			p.DateImported, p.DateCreated, p.DateUpdated)
 	}
 }
 
