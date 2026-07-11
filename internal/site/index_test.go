@@ -42,3 +42,32 @@ func TestWriteIndexJSON(t *testing.T) {
 		t.Errorf("directory Meta = %q, want empty", nodes[0].Meta)
 	}
 }
+
+func TestIndexNodeYear(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, "a.yaml"), "title: A\ndate_updated: 2019-04-01T00:00:00Z\ntracks:\n  - {title: T, artist: X}\n")
+	mustWrite(t, filepath.Join(dir, "b.yaml"), "title: B\ntracks:\n  - {title: T, artist: X}\n") // undated
+	root, err := BuildTree(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := t.TempDir()
+	if err := WriteIndexJSON(out, root); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(filepath.Join(out, "site-index.json"))
+	var nodes []IndexNode
+	if err := json.Unmarshal(data, &nodes); err != nil {
+		t.Fatal(err)
+	}
+	byName := map[string]IndexNode{}
+	for _, n := range nodes {
+		byName[n.Name] = n
+	}
+	if byName["a"].Year != 2019 {
+		t.Errorf("a.Year = %d, want 2019", byName["a"].Year)
+	}
+	if byName["b"].Year != 0 {
+		t.Errorf("undated b.Year = %d, want 0", byName["b"].Year)
+	}
+}
