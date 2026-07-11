@@ -2,6 +2,7 @@
 
 **Date:** 2026-07-11
 **Branch:** `feat/playlist-mosaic-hero` (off `origin/main`, builds on #31)
+**Issue:** #32
 
 ## Goal
 
