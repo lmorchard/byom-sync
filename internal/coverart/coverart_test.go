@@ -80,6 +80,31 @@ func TestResolver_RecordingFallbackWhenNoAlbum(t *testing.T) {
 	}
 }
 
+func TestResolver_UpgradesHTTPArtToHTTPS(t *testing.T) {
+	srv := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/ws/2/release-group"):
+			_, _ = w.Write([]byte(`{"release-groups":[{"id":"rg"}]}`))
+		case r.URL.Path == "/release-group/rg":
+			// CAA returns an http:// thumbnail URL
+			_, _ = w.Write([]byte(`{"images":[{"front":true,"image":"http://caa/x.jpg","thumbnails":{"500":"http://caa/500.jpg"}}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	})
+	r := Resolver{
+		MB:  &MBClient{HTTP: srv.Client(), BaseURL: srv.URL + "/ws/2", UserAgent: "ua"},
+		CAA: &CAAClient{HTTP: srv.Client(), BaseURL: srv.URL},
+	}
+	res, err := r.Resolve(context.Background(), playlist.Track{Artist: "A", Title: "B", Album: "C"})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if res.ImageURL != "https://caa/500.jpg" {
+		t.Errorf("http art URL should be upgraded to https: %q", res.ImageURL)
+	}
+}
+
 func TestResolver_MissWhenCAA404(t *testing.T) {
 	srv := testServer(t, func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/ws/2/release-group") {
