@@ -30,6 +30,31 @@ func mustWrite(t *testing.T, path, body string) {
 	}
 }
 
+func TestBuildTree_SkipsArtStore(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, "mix.yaml"),
+		"title: Mix\ncreator: les\ntracks:\n  - {title: T, artist: A}\n")
+	// A content-addressed art store at <hub>/art (as `resolve art --download` writes)
+	// must NOT be treated as a playlist folder.
+	if err := os.MkdirAll(filepath.Join(dir, "art", "ab"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustWrite(t, filepath.Join(dir, "art", "ab", "abcd.jpg"), "IMG")
+
+	root, err := BuildTree(dir)
+	if err != nil {
+		t.Fatalf("BuildTree: %v", err)
+	}
+	for _, c := range root.Children {
+		if c.Name == "art" {
+			t.Fatalf("the art store must be skipped, but a %q node was created", c.Name)
+		}
+	}
+	if len(root.Children) != 1 || root.Children[0].Name != "mix" {
+		t.Errorf("expected only the mix playlist, got %d children", len(root.Children))
+	}
+}
+
 func TestBuildTree(t *testing.T) {
 	root, err := BuildTree(writeFixtureHub(t))
 	if err != nil {

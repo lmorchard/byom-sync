@@ -48,6 +48,12 @@ func buildDir(fsDir, urlPath, name string) (*Node, error) {
 	}
 	for _, e := range entries {
 		if e.IsDir() {
+			// Skip the content-addressed cover-art store at the hub root
+			// (`resolve art --download` writes <hub>/art); it holds images, not
+			// playlist content, and would otherwise render as empty folders.
+			if urlPath == "" && e.Name() == "art" {
+				continue
+			}
 			child, err := buildDir(
 				filepath.Join(fsDir, e.Name()),
 				path.Join(urlPath, e.Name()),
