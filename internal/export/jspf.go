@@ -20,10 +20,11 @@ type jspfDoc struct {
 }
 
 type jspfPlaylist struct {
-	Title   string      `json:"title,omitempty"`
-	Creator string      `json:"creator,omitempty"`
-	Date    string      `json:"date,omitempty"`
-	Track   []jspfTrack `json:"track"`
+	Title     string                       `json:"title,omitempty"`
+	Creator   string                       `json:"creator,omitempty"`
+	Date      string                       `json:"date,omitempty"`
+	Extension map[string][]jspfPlaylistExt `json:"extension,omitempty"`
+	Track     []jspfTrack                  `json:"track"`
 }
 
 type jspfTrack struct {
@@ -39,6 +40,15 @@ type jspfTrack struct {
 // byomExtNS namespaces byom-sync's JSPF track extension (resolved ids and
 // sync_state). Kept in sync with byom-player's reader.
 const byomExtNS = "https://github.com/lmorchard/byom-sync"
+
+// jspfPlaylistExt carries byom-sync's playlist-level dates that JSPF has no
+// native slot for. date_created maps to the standard playlist "date"; these two
+// are emitted under the byom namespace only when non-zero. byom-player may read
+// them for display and degrades gracefully when absent.
+type jspfPlaylistExt struct {
+	DateUpdated  string `json:"date_updated,omitempty"`
+	DateImported string `json:"date_imported,omitempty"`
+}
 
 type jspfExt struct {
 	Resolved *jspfResolved `json:"resolved,omitempty"`
@@ -63,6 +73,17 @@ func (JSPFExporter) Export(p playlist.Playlist, outputPath string, _ map[string]
 	}}
 	if !p.DateCreated.IsZero() {
 		doc.Playlist.Date = p.DateCreated.UTC().Format("2006-01-02T15:04:05Z")
+	}
+
+	var pext jspfPlaylistExt
+	if !p.DateUpdated.IsZero() {
+		pext.DateUpdated = p.DateUpdated.UTC().Format("2006-01-02T15:04:05Z")
+	}
+	if !p.DateImported.IsZero() {
+		pext.DateImported = p.DateImported.UTC().Format("2006-01-02T15:04:05Z")
+	}
+	if pext.DateUpdated != "" || pext.DateImported != "" {
+		doc.Playlist.Extension = map[string][]jspfPlaylistExt{byomExtNS: {pext}}
 	}
 
 	for _, t := range p.Tracks {
