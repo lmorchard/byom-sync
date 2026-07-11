@@ -10,10 +10,12 @@ import (
 
 func TestPlaylist_YAMLRoundTrip(t *testing.T) {
 	orig := Playlist{
-		SpotifyID:   "37i9dQZF1DXcBWIGoYBM5M",
-		Title:       "Test Playlist",
-		Creator:     "Les",
-		DateCreated: time.Date(2026, 7, 7, 0, 0, 0, 0, time.UTC),
+		SpotifyID:    "37i9dQZF1DXcBWIGoYBM5M",
+		Title:        "Test Playlist",
+		Creator:      "Les",
+		DateImported: time.Date(2026, 7, 8, 0, 0, 0, 0, time.UTC),
+		DateCreated:  time.Date(2026, 7, 7, 0, 0, 0, 0, time.UTC),
+		DateUpdated:  time.Date(2026, 7, 9, 0, 0, 0, 0, time.UTC),
 		Tracks: []Track{
 			{
 				Title:      "Track One",
@@ -46,6 +48,12 @@ func TestPlaylist_YAMLRoundTrip(t *testing.T) {
 	}
 	if !got.DateCreated.Equal(orig.DateCreated) {
 		t.Errorf("date mismatch: got %v want %v", got.DateCreated, orig.DateCreated)
+	}
+	if !got.DateImported.Equal(orig.DateImported) {
+		t.Errorf("date_imported mismatch: got %v want %v", got.DateImported, orig.DateImported)
+	}
+	if !got.DateUpdated.Equal(orig.DateUpdated) {
+		t.Errorf("date_updated mismatch: got %v want %v", got.DateUpdated, orig.DateUpdated)
 	}
 	if len(got.Tracks) != 2 {
 		t.Fatalf("track count: got %d want 2", len(got.Tracks))
@@ -120,8 +128,8 @@ func TestTrack_SpotifyMarkerRoundTrip(t *testing.T) {
 		present bool
 	}{
 		"unset omits field": {in: Track{Title: "T", Artist: "A"}, wantYML: "spotify:", present: false},
-		"false serializes":   {in: Track{Title: "T", Artist: "A", Spotify: &no}, wantYML: "spotify: false", present: true},
-		"true serializes":    {in: Track{Title: "T", Artist: "A", Spotify: &yes}, wantYML: "spotify: true", present: true},
+		"false serializes":  {in: Track{Title: "T", Artist: "A", Spotify: &no}, wantYML: "spotify: false", present: true},
+		"true serializes":   {in: Track{Title: "T", Artist: "A", Spotify: &yes}, wantYML: "spotify: true", present: true},
 	}
 	for name, tc := range cases {
 		data, err := yaml.Marshal(tc.in)
