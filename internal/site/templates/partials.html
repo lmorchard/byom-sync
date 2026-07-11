@@ -1,0 +1,36 @@
+{{define "siteheader"}}
+<header class="site-header">
+<a class="site-title" href="/">{{.Site.Title}}</a>
+{{if .Site.Pages}}<nav class="page-nav">{{range .Site.Pages}}<a href="{{.Href}}">{{.Title}}</a>{{end}}</nav>{{end}}
+</header>
+{{end}}
+
+{{define "head"}}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}} · {{.Site.Title}}</title>
+{{if .Desc}}<meta name="description" content="{{.Desc}}">{{end}}
+<link rel="canonical" href="{{.Canonical}}">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="{{.Site.Title}}">
+<meta property="og:title" content="{{.Title}}">
+{{if .Desc}}<meta property="og:description" content="{{.Desc}}">{{end}}
+<meta property="og:url" content="{{.Canonical}}">
+{{if .Image}}<meta property="og:image" content="{{.Image}}">{{end}}
+<meta name="twitter:card" content="{{if .Image}}summary_large_image{{else}}summary{{end}}">
+<link rel="stylesheet" href="/assets/site.css">
+<link rel="alternate" type="application/rss+xml" title="{{.Site.Title}}" href="/feed.xml">
+{{end}}
+
+{{define "crumbs"}}
+{{if gt (len .Crumbs) 1}}<nav class="crumbs">{{range $i, $c := .Crumbs}}{{if $i}} / {{end}}{{if $c.Href}}<a href="{{$c.Href}}">{{$c.Label}}</a>{{else}}<span>{{$c.Label}}</span>{{end}}{{end}}</nav>{{end}}
+{{end}}
+
+{{define "footer"}}
+<footer class="site-footer">built with <a href="https://github.com/lmorchard/byom-sync">byom-sync</a> · <a href="/feed.xml">RSS</a></footer>
+{{end}}
+
+{{define "player"}}
+<byom-player provider="{{.Site.Provider}}"{{if .Site.Providers}} providers="{{providersCSV .Site.Providers}}"{{end}}{{if .Site.YouTubeSearchEndpoint}} youtube-search-endpoint="{{.Site.YouTubeSearchEndpoint}}"{{end}}{{if .Site.SpotifyClientID}} spotify-client-id="{{.Site.SpotifyClientID}}"{{end}} src="{{.JSPFHref}}"></byom-player>
+<script type="module" src="{{.Site.PlayerSrc}}"></script>
+{{end}}

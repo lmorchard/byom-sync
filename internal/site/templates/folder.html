@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>{{template "head" .}}</head>
+<body class="folder">
+{{template "siteheader" .}}
+<div class="layout">
+<aside class="sidebar">
+<byom-site-nav></byom-site-nav>
+<script type="module" src="/assets/site-nav.js"></script>
+</aside>
+<main>
+{{template "crumbs" .}}
+<h1>{{.Title}}</h1>
+{{if .Intro}}<section class="intro">{{.Intro}}</section>{{end}}
+<section class="tree">{{template "treeList" .Node.Children}}</section>
+</main>
+</div>
+{{template "footer" .}}
+</body>
+</html>

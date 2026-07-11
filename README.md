@@ -27,6 +27,8 @@ orphaned, so your history survives even when Spotify's catalog changes.
 - Two sync strategies: `archive` (append-only, soft-orphans removed tracks) and
   `mirror` (exact overwrite)
 - Exporters for M3U8, JSPF, and Markdown with YAML frontmatter
+- A static site generator (`byom-sync site`) that builds a browsable site of
+  `<byom-player>` pages from the hub
 
 ## Install
 
@@ -192,6 +194,42 @@ byom-sync resolve cache clear                 # wipe everything
 # Bypass the cache for one run (pure network resolution)
 byom-sync resolve youtube --no-cache
 ```
+
+### Generate a static site
+
+Compile the hub into a navigable static site — one page per playlist embedding
+[`<byom-player>`](https://github.com/lmorchard/byom-player), a tree that mirrors
+your hub's subdirectories, a shared nav sidebar, Open Graph metadata, and an RSS
+feed. This is the generator behind sites like `mixtapes.lmorchard.com`.
+
+```sh
+# Build the site from the hub into ./dist
+byom-sync site --input ./playlists --out ./dist --base-url https://example.com
+```
+
+Configure defaults under a `site:` block in `byom-sync.yaml` (only `base_url` is
+required):
+
+```yaml
+site:
+  base_url: https://mixtapes.example.com   # required: canonical URLs, OG tags, CNAME, feed
+  title: mixtapes                          # site name in headers + <title>
+  out_dir: ./dist
+  provider: youtube                        # provider <byom-player> boots with
+  providers: [youtube, spotify]            # optional: offered in the player's picker
+  # youtube_search_endpoint: https://...   # host attributes baked into each page
+  # spotify_client_id: "..."
+  # player_src: https://cdn.jsdelivr.net/gh/lmorchard/byom-player@dist/byom-player.js
+```
+
+The output is a static tree ready for any static host: a landing page, one page
+per playlist (each with a chrome-less `/embed/` variant for iframing into a
+blog), `site-index.json`, `feed.xml`, and a `CNAME`. File playlists into
+subdirectories in the hub and the site mirrors that structure as its nav tree.
+Playback provider and credentials are handled by the player's own settings panel;
+the generator only sets the defaults above. See
+[`.github/workflows/example-site-deploy.yml.example`](.github/workflows/example-site-deploy.yml.example)
+for a GitHub Pages deploy workflow to copy into your content repo.
 
 ## The hub schema
 

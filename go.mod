@@ -6,6 +6,7 @@ require (
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.20.1
+	github.com/yuin/goldmark v1.8.2
 	github.com/zmb3/spotify/v2 v2.4.3
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sync v0.20.0
@@ -18,6 +19,7 @@ require (
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.2.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/gorilla/feeds v1.2.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect

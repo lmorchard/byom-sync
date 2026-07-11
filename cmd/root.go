@@ -83,6 +83,11 @@ func initConfig() {
 	viper.SetDefault("cache_path", "")          // empty → defaultCachePath()
 	viper.SetDefault("cache_miss_ttl", "720h")  // 30d negative-result TTL
 	viper.SetDefault("cache_embed_ttl", "720h") // 30d embeddability TTL
+	viper.SetDefault("site.title", "mixtapes")
+	viper.SetDefault("site.out_dir", "./dist")
+	viper.SetDefault("site.provider", "youtube")
+	viper.SetDefault("site.player_src", "https://cdn.jsdelivr.net/gh/lmorchard/byom-player@dist/byom-player.js")
+	viper.SetDefault("site.pages_dir", "./pages")
 
 	// Read in environment variables that match
 	viper.AutomaticEnv()
