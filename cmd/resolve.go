@@ -463,6 +463,17 @@ func runResolveArt(ctx context.Context) error {
 				t.ImageFile = rel
 				dl++
 			}
+			// The explicit playlist hero image (hand-authored URL) downloads the
+			// same way, into the same content-addressed store.
+			if p.Image != "" && p.ImageFile == "" {
+				rel, derr := store.Save(ctx, p.Image)
+				if derr != nil {
+					log.Warnf("  download playlist art: %v", derr)
+				} else {
+					p.ImageFile = rel
+					dl++
+				}
+			}
 			if dl > 0 {
 				log.Infof("%s: downloaded %d cover(s) into %s/art", base, dl, artRoot)
 			}
@@ -493,10 +504,13 @@ func countMissingArt(p playlist.Playlist) int {
 	return n
 }
 
-// countNeedingDownload counts tracks that have art but haven't had that art
-// downloaded to a local file yet.
+// countNeedingDownload counts art references that have a source URL but haven't
+// been downloaded to a local file yet — the playlist hero image plus each track.
 func countNeedingDownload(p playlist.Playlist) int {
 	n := 0
+	if p.Image != "" && p.ImageFile == "" {
+		n++
+	}
 	for _, t := range p.Tracks {
 		if t.Image != "" && t.ImageFile == "" {
 			n++

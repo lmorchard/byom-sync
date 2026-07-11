@@ -138,10 +138,12 @@ errcheck findings CI caught).
   fills remaining gaps. It degrades gracefully to MusicBrainz-only (with a warning)
   when there's no Spotify token. CAA URLs are normalized to https. `resolve art`
   fills any track missing an image regardless of `spotify:false`, so off-Spotify
-  tracks get art. `Playlist.Image` is playlist-level art (falls back to the first
-  track's image at export). `resolve art --download` saves resolved art into a
+  tracks get art. `Playlist.Image` is an authored playlist-level hero URL; when
+  set it wins over the first-track fallback at export/site, otherwise the first
+  track's image is used. `resolve art --download` saves resolved art into a
   shared, content-addressed `<hub>/art/<hh>/<hash>.<ext>` store (dedup by image
-  bytes) and records `Track.ImageFile` (hub-relative; `Image` stays the source URL).
+  bytes) and records `Track.ImageFile` — plus `Playlist.ImageFile` for the hero —
+  (hub-relative; `Image` stays the source URL).
   `export jspf --embed-art` inlines those local copies as `data:` URLs for a
   self-contained file (run `--download` first; network-free). Pipeline: `resolve
   spotify` → `resolve art` → `resolve youtube` → `export`.

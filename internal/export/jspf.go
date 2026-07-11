@@ -144,20 +144,27 @@ func byomID(t playlist.Track) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// playlistImage returns the playlist's image: when art_base is set, the first
-// track with a downloaded local copy (art_base + image_file); otherwise the
-// playlist's own image, or the first track's image as a fallback so a
-// playlist still has cover art when none was set explicitly.
+// playlistImage returns the playlist's hero image. An explicit playlist-level
+// image (p.Image / its downloaded p.ImageFile) wins over the first-track
+// fallback: embedded data: URL (embed_art) → deployed local copy (art_base +
+// image_file) → the source Image URL. When no explicit hero is set, it falls
+// back to the first track with art so a playlist still has cover art.
 func playlistImage(p playlist.Playlist, opts map[string]string) string {
+	if d, ok := embedDataURL(p.ImageFile, opts); ok {
+		return d
+	}
+	if base := opts["art_base"]; base != "" && p.ImageFile != "" {
+		return joinURL(base, p.ImageFile)
+	}
+	if p.Image != "" {
+		return p.Image
+	}
 	if base := opts["art_base"]; base != "" {
 		for _, t := range p.Tracks {
 			if t.ImageFile != "" {
 				return joinURL(base, t.ImageFile)
 			}
 		}
-	}
-	if p.Image != "" {
-		return p.Image
 	}
 	for _, t := range p.Tracks {
 		if t.Image != "" {
@@ -172,18 +179,30 @@ func playlistImage(p playlist.Playlist, opts map[string]string) string {
 // else, when art_base is set and a local copy exists, art_base + image_file;
 // else the track's source Image URL.
 func jspfImage(t playlist.Track, opts map[string]string) string {
-	if opts["embed_art"] == "true" && t.ImageFile != "" {
-		abs := filepath.Join(opts["art_root"], filepath.FromSlash(t.ImageFile))
-		if data, err := os.ReadFile(abs); err == nil {
-			ct := ctypeForExt(filepath.Ext(t.ImageFile))
-			return "data:" + ct + ";base64," + base64.StdEncoding.EncodeToString(data)
-		}
-		// read failed → fall through to the URL
+	if d, ok := embedDataURL(t.ImageFile, opts); ok {
+		return d
 	}
 	if base := opts["art_base"]; base != "" && t.ImageFile != "" {
 		return joinURL(base, t.ImageFile)
 	}
 	return t.Image
+}
+
+// embedDataURL reads a downloaded local art copy (art_root + imageFile) and
+// returns it as a base64 data: URL. Returns ("", false) when embedding isn't
+// requested, no local copy is recorded, or the read fails — callers then fall
+// through to a URL.
+func embedDataURL(imageFile string, opts map[string]string) (string, bool) {
+	if opts["embed_art"] != "true" || imageFile == "" {
+		return "", false
+	}
+	abs := filepath.Join(opts["art_root"], filepath.FromSlash(imageFile))
+	data, err := os.ReadFile(abs)
+	if err != nil {
+		return "", false
+	}
+	ct := ctypeForExt(filepath.Ext(imageFile))
+	return "data:" + ct + ";base64," + base64.StdEncoding.EncodeToString(data), true
 }
 
 // joinURL joins a base URL and a relative path with exactly one slash.

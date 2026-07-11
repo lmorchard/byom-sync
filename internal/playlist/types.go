@@ -18,6 +18,10 @@ type Playlist struct {
 	// Image is playlist-level cover art (a URL). When unset, exporters fall back
 	// to the first track's image.
 	Image string `yaml:"image,omitempty"`
+	// ImageFile is a hub-relative path to a downloaded local copy of Image (from
+	// `resolve art --download`); Image stays as the source URL. Mirrors
+	// Track.ImageFile.
+	ImageFile string `yaml:"image_file,omitempty"`
 	// DateImported is when byom-sync first saw this playlist (its original
 	// "first seen" time). Spotify's API exposes no true playlist creation date.
 	DateImported time.Time `yaml:"date_imported"`

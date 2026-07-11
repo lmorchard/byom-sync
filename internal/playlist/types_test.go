@@ -185,18 +185,28 @@ func TestTrack_EnrichFieldsRoundTrip(t *testing.T) {
 }
 
 func TestPlaylist_ImageRoundTrip(t *testing.T) {
-	data, err := yaml.Marshal(Playlist{Title: "T", Image: "https://img/pl.jpg"})
+	data, err := yaml.Marshal(Playlist{Title: "T", Image: "https://img/pl.jpg", ImageFile: "art/ee/hero.jpg"})
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
 	if !strings.Contains(string(data), "image: https://img/pl.jpg") {
 		t.Errorf("playlist image not serialized:\n%s", data)
 	}
-	// omitempty: no image -> no image key at the playlist level
+	if !strings.Contains(string(data), "image_file: art/ee/hero.jpg") {
+		t.Errorf("playlist image_file not serialized:\n%s", data)
+	}
+	var back Playlist
+	if err := yaml.Unmarshal(data, &back); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if back.ImageFile != "art/ee/hero.jpg" {
+		t.Errorf("image_file round-trip: got %q", back.ImageFile)
+	}
+	// omitempty: no image -> no image/image_file keys at the playlist level
 	bare, _ := yaml.Marshal(Playlist{Title: "T"})
 	for _, line := range strings.Split(string(bare), "\n") {
-		if strings.HasPrefix(line, "image:") {
-			t.Errorf("bare playlist should omit image:\n%s", bare)
+		if strings.HasPrefix(line, "image:") || strings.HasPrefix(line, "image_file:") {
+			t.Errorf("bare playlist should omit image/image_file:\n%s", bare)
 		}
 	}
 }
