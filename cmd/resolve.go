@@ -290,15 +290,18 @@ Typically run before 'resolve youtube' so downstream identity keys on ISRC.`,
 
 var resolveArtCmd = &cobra.Command{
 	Use:   "art",
-	Short: "Fill missing cover art from MusicBrainz + the Cover Art Archive",
+	Short: "Fill missing cover art (Spotify first, then MusicBrainz/Cover Art Archive)",
 	Long: `Find cover art for every hub track that has no image yet and write the URL
-into the YAML. Looks up MusicBrainz (release-group by artist+album when an album
-is present, else the recording by artist+title) and fetches the front cover from
-the Cover Art Archive. Public APIs — no key needed. Independent of spotify:false,
-so off-Spotify tracks get art too.
+into the YAML. Spotify-first: tracks with a spotify_id get their album art in a
+fast batched lookup by id (needs a token — run 'byom-sync auth'; without one this
+step is skipped with a warning). Tracks still missing art then fall back to
+MusicBrainz (release-group by artist+album when an album is present, else the
+recording by artist+title) → the Cover Art Archive front cover. Independent of
+spotify:false, so off-Spotify tracks get art too.
 
---limit caps tracks attempted per run; --delay paces MusicBrainz requests (its
-~1 req/sec policy).`,
+--limit and --delay bound only the MusicBrainz fallback pass (the Spotify pass is
+batched and unbounded): --limit caps tracks attempted there per run; --delay
+paces MusicBrainz requests (its ~1 req/sec policy).`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runResolveArt(context.Background())
 	},
@@ -780,7 +783,7 @@ func init() {
 
 	resolveCmd.AddCommand(resolveArtCmd)
 	resolveArtCmd.Flags().StringVar(&artInput, "input", "", "hub YAML file or directory (default: config dir)")
-	resolveArtCmd.Flags().IntVar(&artLimit, "limit", 0, "max tracks attempted this run (0 = unlimited)")
+	resolveArtCmd.Flags().IntVar(&artLimit, "limit", 0, "max tracks attempted in the MusicBrainz fallback pass (0 = unlimited; Spotify pass is unbounded)")
 	resolveArtCmd.Flags().DurationVar(&artDelay, "delay", 1100*time.Millisecond, "pause between MusicBrainz lookups (~1 req/sec policy)")
 	resolveArtCmd.Flags().BoolVar(&artNoCache, "no-cache", false, "bypass the art cache")
 
