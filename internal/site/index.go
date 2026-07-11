@@ -14,7 +14,8 @@ type IndexNode struct {
 	Title    string      `json:"title"`
 	Path     string      `json:"path"`
 	IsDir    bool        `json:"isDir"`
-	Meta     string      `json:"meta,omitempty"` // playlist summary line (leaves only)
+	Meta     string      `json:"meta,omitempty"`  // playlist summary line (leaves only)
+	Image    string      `json:"image,omitempty"` // resolved cover href (leaves only)
 	Year     int         `json:"year,omitempty"`
 	Children []IndexNode `json:"children,omitempty"`
 }
@@ -31,6 +32,7 @@ func toIndexNodes(children []*Node) []IndexNode {
 		}
 		if !c.IsDir {
 			n.Meta = playlistMeta(c.Playlist)
+			n.Image = coverHref(c.Playlist)
 			if !c.Playlist.DateUpdated.IsZero() {
 				n.Year = c.Playlist.DateUpdated.Year()
 			}

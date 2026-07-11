@@ -8,25 +8,21 @@ import (
 	"github.com/lmorchard/byom-sync/internal/playlist"
 )
 
-// playlistImage returns the page's og:image. An explicit playlist-level hero
-// image (its deployed local copy p.ImageFile, else the source p.Image URL) wins
-// over the first-track fallback: the deployed local copy of the first track with
-// one (base URL + image_file), else the first track's source Image URL, else "".
-func playlistImage(p *playlist.Playlist, baseURL string) string {
-	// Unlike canonical, image_file is a file path, not a page/folder path — it
-	// must not gain a trailing slash.
-	abs := func(imageFile string) string {
-		return strings.TrimRight(baseURL, "/") + "/" + strings.TrimLeft(imageFile, "/")
-	}
+// coverHref resolves a playlist's cover as a root-relative site path (leading
+// "/") for a local file, the remote URL as-is, or "" when none. Precedence
+// matches playlistImage: playlist hero, then first track. GenerateMosaics
+// populates ImageFile for cover-less playlists before rendering, so this is
+// almost always the (mosaic or explicit) hero.
+func coverHref(p *playlist.Playlist) string {
 	if p.ImageFile != "" {
-		return abs(p.ImageFile)
+		return "/" + p.ImageFile
 	}
 	if p.Image != "" {
 		return p.Image
 	}
 	for _, t := range p.Tracks {
 		if t.ImageFile != "" {
-			return abs(t.ImageFile)
+			return "/" + t.ImageFile
 		}
 	}
 	for _, t := range p.Tracks {
@@ -35,6 +31,17 @@ func playlistImage(p *playlist.Playlist, baseURL string) string {
 		}
 	}
 	return ""
+}
+
+// playlistImage returns the playlist cover as an absolute URL for og:image,
+// prefixing the deployed baseURL onto a root-relative local path and passing a
+// remote URL through unchanged.
+func playlistImage(p *playlist.Playlist, baseURL string) string {
+	href := coverHref(p)
+	if strings.HasPrefix(href, "/") {
+		return strings.TrimRight(baseURL, "/") + href
+	}
+	return href
 }
 
 // firstParagraph returns the first non-empty line of markdown with any leading

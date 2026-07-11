@@ -71,11 +71,12 @@ type Renderer struct {
 // NewRenderer parses the embedded templates.
 func NewRenderer(site SiteMeta) (*Renderer, error) {
 	funcs := template.FuncMap{
-		"markdown":     renderMarkdown,
-		"providersCSV": func(p []string) string { return strings.Join(p, ",") },
-		"playlistMeta": playlistMeta,
-		"dirsOf":       dirsOf,
-		"yearGroupsOf": yearGroupsOf,
+		"markdown":      renderMarkdown,
+		"providersCSV":  func(p []string) string { return strings.Join(p, ",") },
+		"playlistMeta":  playlistMeta,
+		"playlistCover": coverHref,
+		"dirsOf":        dirsOf,
+		"yearGroupsOf":  yearGroupsOf,
 	}
 	tmpl, err := template.New("site").Funcs(funcs).ParseFS(embedded, "templates/*.html")
 	if err != nil {
