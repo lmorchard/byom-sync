@@ -44,3 +44,6 @@ token.json
 # Build artifacts
 build/
 dist/
+
+# Claude Code Playwright MCP scratch
+.playwright-mcp/
