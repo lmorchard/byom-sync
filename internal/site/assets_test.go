@@ -19,6 +19,9 @@ func TestWriteAssetsAndCNAME(t *testing.T) {
 	if !strings.Contains(string(js), "customElements.define('byom-site-nav'") {
 		t.Error("site-nav.js missing component registration")
 	}
+	if !strings.Contains(string(js), "nav-cover") {
+		t.Error("site-nav.js missing cover thumbnail rendering")
+	}
 	if _, err := os.Stat(filepath.Join(out, "assets", "site.css")); err != nil {
 		t.Errorf("site.css missing: %v", err)
 	}
