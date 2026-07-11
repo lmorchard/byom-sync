@@ -38,6 +38,17 @@ func TestCountNeedingDownload(t *testing.T) {
 	if got != 1 {
 		t.Errorf("countNeedingDownload = %d, want 1 (needs-download)", got)
 	}
+
+	// The playlist hero image counts too: an authored URL with no local copy yet.
+	withHero := countNeedingDownload(playlist.Playlist{Image: "http://example.com/hero.jpg", Tracks: tracks})
+	if withHero != 2 {
+		t.Errorf("countNeedingDownload with hero = %d, want 2 (track + hero)", withHero)
+	}
+	// Hero already downloaded → not counted.
+	heroDone := countNeedingDownload(playlist.Playlist{Image: "http://example.com/hero.jpg", ImageFile: "art/hero.jpg", Tracks: tracks})
+	if heroDone != 1 {
+		t.Errorf("countNeedingDownload with downloaded hero = %d, want 1 (track only)", heroDone)
+	}
 }
 
 func TestCountNeedingEnrich(t *testing.T) {

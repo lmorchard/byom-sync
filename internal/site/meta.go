@@ -8,16 +8,25 @@ import (
 	"github.com/lmorchard/byom-sync/internal/playlist"
 )
 
-// playlistImage returns the page's og:image: the deployed local copy of the
-// first track with one (base URL + image_file), else the first track's source
-// Image URL, else "". Playlist-level cover art (a parallel effort) can
-// supersede this once the field lands.
+// playlistImage returns the page's og:image. An explicit playlist-level hero
+// image (its deployed local copy p.ImageFile, else the source p.Image URL) wins
+// over the first-track fallback: the deployed local copy of the first track with
+// one (base URL + image_file), else the first track's source Image URL, else "".
 func playlistImage(p *playlist.Playlist, baseURL string) string {
+	// Unlike canonical, image_file is a file path, not a page/folder path — it
+	// must not gain a trailing slash.
+	abs := func(imageFile string) string {
+		return strings.TrimRight(baseURL, "/") + "/" + strings.TrimLeft(imageFile, "/")
+	}
+	if p.ImageFile != "" {
+		return abs(p.ImageFile)
+	}
+	if p.Image != "" {
+		return p.Image
+	}
 	for _, t := range p.Tracks {
 		if t.ImageFile != "" {
-			// Unlike canonical, image_file is a file path, not a page/folder
-			// path — it must not gain a trailing slash.
-			return strings.TrimRight(baseURL, "/") + "/" + strings.TrimLeft(t.ImageFile, "/")
+			return abs(t.ImageFile)
 		}
 	}
 	for _, t := range p.Tracks {

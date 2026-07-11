@@ -178,6 +178,64 @@ func TestJSPFExport_ExplicitPlaylistImageWins(t *testing.T) {
 	}
 }
 
+func TestJSPFExport_ExplicitPlaylistImageWinsOverArtBase(t *testing.T) {
+	// The site-build case (art_base set, first track has a downloaded copy): an
+	// explicit playlist hero must still win over the first-track fallback.
+	p := samplePlaylist() // first track: Image https://img/song-one.jpg, ImageFile set below
+	p.Tracks[0].ImageFile = "art/ff/first.jpg"
+	p.Image = "https://img/hero.jpg"
+	out := filepath.Join(t.TempDir(), "h.jspf")
+	if err := (JSPFExporter{}).Export(p, out, map[string]string{"art_base": "https://site.example"}); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(out)
+	var doc map[string]any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("json: %v", err)
+	}
+	// No p.ImageFile yet → the source hero URL wins over the first track's copy.
+	if got := doc["playlist"].(map[string]any)["image"]; got != "https://img/hero.jpg" {
+		t.Errorf("explicit hero must beat first-track art on a site build, got %v", got)
+	}
+
+	// Once downloaded (p.ImageFile set), the hero self-hosts via art_base.
+	p.ImageFile = "art/ee/hero.jpg"
+	if err := (JSPFExporter{}).Export(p, out, map[string]string{"art_base": "https://site.example"}); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ = os.ReadFile(out)
+	_ = json.Unmarshal(raw, &doc)
+	if got := doc["playlist"].(map[string]any)["image"]; got != "https://site.example/art/ee/hero.jpg" {
+		t.Errorf("downloaded hero should use art_base+image_file, got %v", got)
+	}
+}
+
+func TestJSPFExport_EmbedPlaylistHero(t *testing.T) {
+	root := t.TempDir()
+	rel := filepath.Join("art", "ee", "hero.jpg")
+	if err := os.MkdirAll(filepath.Join(root, "art", "ee"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, rel), []byte("HEROBYTES"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	p := samplePlaylist()
+	p.Image = "https://img/hero.jpg"
+	p.ImageFile = "art/ee/hero.jpg"
+	out := filepath.Join(t.TempDir(), "eh.jspf")
+	if err := (JSPFExporter{}).Export(p, out, map[string]string{"embed_art": "true", "art_root": root}); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(out)
+	var doc map[string]any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("json: %v", err)
+	}
+	if got := doc["playlist"].(map[string]any)["image"].(string); !strings.HasPrefix(got, "data:image/jpeg;base64,") {
+		t.Errorf("playlist hero with a local copy should embed a data URL, got %q", got)
+	}
+}
+
 func TestJSPFExport_EmbedArt(t *testing.T) {
 	root := t.TempDir()
 	// a downloaded local cover

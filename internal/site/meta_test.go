@@ -59,6 +59,24 @@ func TestPlaylistImage_PrefersDeployedLocalArt(t *testing.T) {
 	}
 }
 
+func TestPlaylistImage_ExplicitHeroWins(t *testing.T) {
+	// First track has a deployed local copy, but an explicit playlist hero must
+	// win the og:image.
+	tracks := []playlist.Track{{Title: "A", Image: "https://x/c.jpg", ImageFile: "art/ff/first.jpg"}}
+
+	// Source hero URL, not yet downloaded → used as-is.
+	p := &playlist.Playlist{Image: "https://x/hero.jpg", Tracks: tracks}
+	if got := playlistImage(p, "https://site.example"); got != "https://x/hero.jpg" {
+		t.Errorf("explicit hero URL should win: %q", got)
+	}
+
+	// Downloaded hero → self-hosted base+image_file.
+	q := &playlist.Playlist{Image: "https://x/hero.jpg", ImageFile: "art/ee/hero.jpg", Tracks: tracks}
+	if got := playlistImage(q, "https://site.example"); got != "https://site.example/art/ee/hero.jpg" {
+		t.Errorf("downloaded hero should self-host: %q", got)
+	}
+}
+
 func TestDateRange(t *testing.T) {
 	feb23 := time.Date(2023, 2, 1, 0, 0, 0, 0, time.UTC)
 	jun26 := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
