@@ -389,7 +389,7 @@ func runResolveArt(ctx context.Context) error {
 		if lerr != nil {
 			return fmt.Errorf("load %s: %w", path, lerr)
 		}
-		if countMissingArt(p) == 0 {
+		if countMissingArt(p) == 0 && (store == nil || countNeedingDownload(p) == 0) {
 			log.Infof("%s: all tracks have art (%d tracks)", filepath.Base(path), len(p.Tracks))
 			continue
 		}
@@ -487,6 +487,18 @@ func countMissingArt(p playlist.Playlist) int {
 	n := 0
 	for _, t := range p.Tracks {
 		if t.Image == "" {
+			n++
+		}
+	}
+	return n
+}
+
+// countNeedingDownload counts tracks that have art but haven't had that art
+// downloaded to a local file yet.
+func countNeedingDownload(p playlist.Playlist) int {
+	n := 0
+	for _, t := range p.Tracks {
+		if t.Image != "" && t.ImageFile == "" {
 			n++
 		}
 	}
