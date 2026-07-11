@@ -49,6 +49,8 @@ YouTube resolution cache in `internal/rcache/` — an index, not a source of tru
   album-first then recording fallback), `resolve.go` (`Resolve` loop, `Options`,
   `Event`, `Cache`). Public APIs, no key; MusicBrainz needs a User-Agent + ~1
   req/sec pacing.
+- `internal/artstore/` — content-addressed cover-art download store: `artstore.go`
+  (`Store.Save`/`Load` for persistent local art with dedup by image bytes).
 - `internal/rcache/` — SQLite cache with three tables in one `cache.db`:
   `resolution_cache` (YouTube), `enrichment_cache` (Spotify), and `art_cache`
   (cover art: `ArtEntry`, `GetArt`/`PutArt`). `Stats`/`EnrichStats`/`ArtStats`
@@ -133,8 +135,12 @@ errcheck findings CI caught).
   when there's no Spotify token. CAA URLs are normalized to https. `resolve art`
   fills any track missing an image regardless of `spotify:false`, so off-Spotify
   tracks get art. `Playlist.Image` is playlist-level art (falls back to the first
-  track's image at export). Pipeline: `resolve spotify` → `resolve art` →
-  `resolve youtube` → `export`.
+  track's image at export). `resolve art --download` saves resolved art into a
+  shared, content-addressed `<hub>/art/<hh>/<hash>.<ext>` store (dedup by image
+  bytes) and records `Track.ImageFile` (hub-relative; `Image` stays the source URL).
+  `export jspf --embed-art` inlines those local copies as `data:` URLs for a
+  self-contained file (run `--download` first; network-free). Pipeline: `resolve
+  spotify` → `resolve art` → `resolve youtube` → `export`.
 - **Exporters:** m3u8 builds `{prefix}/{Artist}/{Album}/{Title}.{ext}` paths
   verbatim; jspf uses `urn:isrc:` identifiers (or a synthesized
   `urn:byom:<sha1(ContentKey)>` when a track has no ISRC, so every track is

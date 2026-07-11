@@ -28,6 +28,18 @@ func TestApplyTrackArt(t *testing.T) {
 	}
 }
 
+func TestCountNeedingDownload(t *testing.T) {
+	tracks := []playlist.Track{
+		{Title: "needs download", Image: "http://example.com/a.jpg"},                             // needs: image, no file
+		{Title: "already downloaded", Image: "http://example.com/b.jpg", ImageFile: "art/b.jpg"}, // skip: has file
+		{Title: "no art"}, // skip: no image
+	}
+	got := countNeedingDownload(playlist.Playlist{Tracks: tracks})
+	if got != 1 {
+		t.Errorf("countNeedingDownload = %d, want 1 (needs-download)", got)
+	}
+}
+
 func TestCountNeedingEnrich(t *testing.T) {
 	no := false
 	yes := true

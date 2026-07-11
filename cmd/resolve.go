@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/lmorchard/byom-sync/internal/artstore"
 	"github.com/lmorchard/byom-sync/internal/auth"
 	"github.com/lmorchard/byom-sync/internal/coverart"
 	"github.com/lmorchard/byom-sync/internal/playlist"
@@ -31,10 +32,11 @@ var (
 )
 
 var (
-	artInput   string
-	artLimit   int
-	artDelay   time.Duration
-	artNoCache bool
+	artInput    string
+	artLimit    int
+	artDelay    time.Duration
+	artNoCache  bool
+	artDownload bool
 )
 
 var (
@@ -338,6 +340,15 @@ func runResolveArt(ctx context.Context) error {
 		return nil
 	}
 
+	artRoot := input
+	if fi, statErr := os.Stat(input); statErr == nil && !fi.IsDir() {
+		artRoot = filepath.Dir(input)
+	}
+	var store *artstore.Store
+	if artDownload {
+		store = &artstore.Store{Root: artRoot, HTTP: http.DefaultClient}
+	}
+
 	// Spotify pass client (best art source). Optional: degrade to MusicBrainz-only
 	// when there's no token.
 	var spotClient *spotify.Client
@@ -378,7 +389,7 @@ func runResolveArt(ctx context.Context) error {
 		if lerr != nil {
 			return fmt.Errorf("load %s: %w", path, lerr)
 		}
-		if countMissingArt(p) == 0 {
+		if countMissingArt(p) == 0 && (store == nil || countNeedingDownload(p) == 0) {
 			log.Infof("%s: all tracks have art (%d tracks)", filepath.Base(path), len(p.Tracks))
 			continue
 		}
@@ -437,6 +448,26 @@ func runResolveArt(ctx context.Context) error {
 			log.Infof("%s: %d filled from Spotify (none left for MusicBrainz)", base, spot)
 		}
 
+		if store != nil {
+			dl := 0
+			for i := range p.Tracks {
+				t := &p.Tracks[i]
+				if t.Image == "" || t.ImageFile != "" {
+					continue
+				}
+				rel, derr := store.Save(ctx, t.Image)
+				if derr != nil {
+					log.Warnf("  download art: %s - %s: %v", t.Artist, t.Title, derr)
+					continue
+				}
+				t.ImageFile = rel
+				dl++
+			}
+			if dl > 0 {
+				log.Infof("%s: downloaded %d cover(s) into %s/art", base, dl, artRoot)
+			}
+		}
+
 		if serr := playlist.SaveFile(path, p); serr != nil {
 			return fmt.Errorf("save %s: %w", path, serr)
 		}
@@ -456,6 +487,18 @@ func countMissingArt(p playlist.Playlist) int {
 	n := 0
 	for _, t := range p.Tracks {
 		if t.Image == "" {
+			n++
+		}
+	}
+	return n
+}
+
+// countNeedingDownload counts tracks that have art but haven't had that art
+// downloaded to a local file yet.
+func countNeedingDownload(p playlist.Playlist) int {
+	n := 0
+	for _, t := range p.Tracks {
+		if t.Image != "" && t.ImageFile == "" {
 			n++
 		}
 	}
@@ -786,6 +829,7 @@ func init() {
 	resolveArtCmd.Flags().IntVar(&artLimit, "limit", 0, "max tracks attempted in the MusicBrainz fallback pass (0 = unlimited; Spotify pass is unbounded)")
 	resolveArtCmd.Flags().DurationVar(&artDelay, "delay", 1100*time.Millisecond, "pause between MusicBrainz lookups (~1 req/sec policy)")
 	resolveArtCmd.Flags().BoolVar(&artNoCache, "no-cache", false, "bypass the art cache")
+	resolveArtCmd.Flags().BoolVar(&artDownload, "download", false, "download resolved cover art into a local <hub>/art store and record image_file")
 
 	resolveCmd.AddCommand(resolvePrimeCmd)
 	resolvePrimeCmd.Flags().StringVar(&primeInput, "input", "", "hub YAML file or directory (default: config dir)")

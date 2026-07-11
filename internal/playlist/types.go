@@ -66,7 +66,10 @@ type Track struct {
 	DurationMS int    `yaml:"duration_ms,omitempty"`
 	YouTubeID  string `yaml:"youtube_id,omitempty"`
 	Image      string `yaml:"image,omitempty"`
-	AddedAt    string `yaml:"added_at,omitempty"`
+	// ImageFile is a hub-relative path to a downloaded local copy of the cover
+	// (from `resolve art --download`); Image stays as the source URL.
+	ImageFile string `yaml:"image_file,omitempty"`
+	AddedAt   string `yaml:"added_at,omitempty"`
 	// Spotify is a tri-state opt-out for enrichment. nil (field absent) or true
 	// means "enrich normally"; false ("spotify: false") asserts the track has no
 	// Spotify equivalent, so `resolve spotify` skips it. A pointer so an explicit
