@@ -86,7 +86,7 @@ func initConfig() {
 	viper.SetDefault("site.title", "mixtapes")
 	viper.SetDefault("site.out_dir", "./dist")
 	viper.SetDefault("site.provider", "youtube")
-	viper.SetDefault("site.player_src", "https://cdn.jsdelivr.net/gh/lmorchard/byom-player@dist/byom-player.js")
+	viper.SetDefault("site.player_src", "https://cdn.jsdelivr.net/npm/@lmorchard/byom-player@1.0.0/dist/byom-player.js")
 	viper.SetDefault("site.pages_dir", "./pages")
 
 	// Read in environment variables that match
