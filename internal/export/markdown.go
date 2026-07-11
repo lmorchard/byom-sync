@@ -20,6 +20,7 @@ type markdownView struct {
 	Title   string
 	Creator string
 	Date    string
+	Updated string
 	Tracks  []playlist.Track
 }
 
@@ -36,6 +37,9 @@ func (MarkdownExporter) Export(p playlist.Playlist, outputPath string, cfg map[s
 	view := markdownView{Title: p.Title, Creator: p.Creator, Tracks: p.Tracks}
 	if !p.DateCreated.IsZero() {
 		view.Date = p.DateCreated.UTC().Format("2006-01-02")
+	}
+	if !p.DateUpdated.IsZero() {
+		view.Updated = p.DateUpdated.UTC().Format("2006-01-02")
 	}
 
 	var b bytes.Buffer

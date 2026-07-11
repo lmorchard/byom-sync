@@ -2,6 +2,7 @@
 title: "{{ .Title }}"
 creator: "{{ .Creator }}"
 date: "{{ .Date }}"
+updated: "{{ .Updated }}"
 ---
 
 | Title | Artist | Album | Added |

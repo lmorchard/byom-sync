@@ -130,7 +130,10 @@ func TestJSPFExport(t *testing.T) {
 func TestMarkdownExport(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out.md")
-	if err := (MarkdownExporter{}).Export(samplePlaylist(), out, nil); err != nil {
+	p := samplePlaylist()
+	p.DateCreated = time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	p.DateUpdated = time.Date(2025, 6, 15, 0, 0, 0, 0, time.UTC)
+	if err := (MarkdownExporter{}).Export(p, out, nil); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := os.ReadFile(out)
@@ -141,6 +144,12 @@ func TestMarkdownExport(t *testing.T) {
 	}
 	if !strings.Contains(s, `title: "Road Trip"`) {
 		t.Errorf("frontmatter title missing:\n%s", s)
+	}
+	if !strings.Contains(s, `date: "2020-01-01"`) {
+		t.Errorf("frontmatter date should be date_created:\n%s", s)
+	}
+	if !strings.Contains(s, `updated: "2025-06-15"`) {
+		t.Errorf("frontmatter updated missing:\n%s", s)
 	}
 	// a table row per track
 	if !strings.Contains(s, "Song One") || !strings.Contains(s, "Artist A") || !strings.Contains(s, "Album X") {
