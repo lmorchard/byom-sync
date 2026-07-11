@@ -50,3 +50,7 @@ body.embed { padding:.5rem; }
 .playlist-card .title { font-weight:600; }
 .playlist-card .meta { color:var(--muted); font-size:.82rem; margin-top:.15rem; }
 .playlist-card .blurb { color:#c2c2c2; font-size:.85rem; margin-top:.35rem; }
+
+.site-nav .nav-leaf { display:flex; gap:.5rem; align-items:center; }
+.site-nav .nav-cover { width:2.2rem; height:2.2rem; border-radius:4px; object-fit:cover; flex:none; background:#222; }
+.site-nav .nav-text { display:flex; flex-direction:column; min-width:0; }
