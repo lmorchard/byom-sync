@@ -6,6 +6,28 @@ import (
 	"github.com/lmorchard/byom-sync/internal/playlist"
 )
 
+func TestApplyTrackArt(t *testing.T) {
+	p := &playlist.Playlist{Tracks: []playlist.Track{
+		{Title: "A", SpotifyID: "s1"},                // gets art
+		{Title: "B", SpotifyID: "s2", Image: "keep"}, // already has image -> untouched
+		{Title: "C", SpotifyID: "s3"},                // no art in map -> untouched
+		{Title: "D"},                                 // no spotify_id -> untouched
+	}}
+	n := applyTrackArt(p, map[string]string{"s1": "art1", "s2": "art2"})
+	if n != 1 {
+		t.Fatalf("filled = %d, want 1", n)
+	}
+	if p.Tracks[0].Image != "art1" {
+		t.Errorf("track A should get art1: %q", p.Tracks[0].Image)
+	}
+	if p.Tracks[1].Image != "keep" {
+		t.Errorf("track B image must not be overwritten: %q", p.Tracks[1].Image)
+	}
+	if p.Tracks[2].Image != "" || p.Tracks[3].Image != "" {
+		t.Errorf("tracks C/D should stay imageless")
+	}
+}
+
 func TestCountNeedingEnrich(t *testing.T) {
 	no := false
 	yes := true
