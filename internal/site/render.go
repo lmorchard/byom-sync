@@ -20,6 +20,7 @@ type SiteMeta struct {
 	Providers             []string
 	YouTubeSearchEndpoint string
 	SpotifyClientID       string
+	Pages                 []PageLink
 }
 
 // Crumb is one breadcrumb link (Href empty → plain text, i.e. current page).
@@ -56,6 +57,11 @@ type playlistData struct {
 	JSPFHref string
 }
 
+type contentPageData struct {
+	pageData
+	Body template.HTML
+}
+
 // Renderer holds the parsed template set and site settings.
 type Renderer struct {
 	Site SiteMeta
@@ -90,6 +96,29 @@ func (r *Renderer) RenderSite(outDir string, root *Node) error {
 		return err
 	}
 	return r.renderChildren(outDir, root, nil)
+}
+
+// RenderPages writes one HTML page per content page at <outDir>/pages/<slug>/index.html.
+func (r *Renderer) RenderPages(outDir string, pages []ContentPage) error {
+	for _, p := range pages {
+		dir := filepath.Join(outDir, "pages", p.Slug)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return err
+		}
+		data := contentPageData{
+			pageData: pageData{
+				Site:      r.Site,
+				Title:     p.Title,
+				Desc:      p.Desc,
+				Canonical: canonical(r.Site.BaseURL, "pages/"+p.Slug),
+			},
+			Body: p.Body,
+		}
+		if err := r.write(filepath.Join(dir, "index.html"), "page.html", data); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (r *Renderer) renderLanding(outDir string, root *Node) error {
