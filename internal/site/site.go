@@ -63,6 +63,9 @@ func Build(opts Options) error {
 	if err := WriteAssets(opts.OutDir); err != nil {
 		return err
 	}
+	if err := CopyArt(opts.HubDir, opts.OutDir); err != nil {
+		return err
+	}
 	if err := WriteCNAME(opts.OutDir, opts.Site.BaseURL); err != nil {
 		return err
 	}
