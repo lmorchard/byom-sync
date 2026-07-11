@@ -3,6 +3,7 @@ package site
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -60,5 +61,33 @@ func TestBuildTree(t *testing.T) {
 	}
 	if root.Children[0].IntroMD == "" {
 		t.Error("synthpop IntroMD should come from README.md")
+	}
+}
+
+func TestBuildTreeReverseChron(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, updated string) {
+		body := "title: " + name + "\ntracks:\n  - {title: T, artist: A}\n"
+		if updated != "" {
+			body = "title: " + name + "\ndate_updated: " + updated + "\ntracks:\n  - {title: T, artist: A}\n"
+		}
+		mustWrite(t, filepath.Join(dir, name+".yaml"), body)
+	}
+	write("old", "2015-03-01T00:00:00Z")
+	write("newest", "2020-06-01T00:00:00Z")
+	write("mid", "2018-01-01T00:00:00Z")
+	write("undated", "") // no date_updated
+
+	root, err := BuildTree(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var order []string
+	for _, c := range root.Children {
+		order = append(order, c.Name)
+	}
+	want := []string{"newest", "mid", "old", "undated"}
+	if strings.Join(order, ",") != strings.Join(want, ",") {
+		t.Errorf("order = %v, want %v", order, want)
 	}
 }
