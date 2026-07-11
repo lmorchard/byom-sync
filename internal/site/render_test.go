@@ -174,7 +174,7 @@ func TestRenderCardBlurb(t *testing.T) {
 	dir := t.TempDir()
 	mustWrite(t, filepath.Join(dir, "index.md"), "# hub\n")
 	mustWrite(t, filepath.Join(dir, "a.yaml"),
-		"title: A\ndescription: A short blurb.\ntracks:\n  - {title: T, artist: X}\n")
+		"title: A\ndescription: It&#x27;s https:&#x2F;&#x2F;x.test\ntracks:\n  - {title: T, artist: X}\n")
 	mustWrite(t, filepath.Join(dir, "b.yaml"),
 		"title: B\ntracks:\n  - {title: T, artist: X}\n")
 	root, err := BuildTree(dir)
@@ -191,8 +191,14 @@ func TestRenderCardBlurb(t *testing.T) {
 	}
 	b, _ := os.ReadFile(filepath.Join(out, "index.html"))
 	s := string(b)
-	if !strings.Contains(s, `class="blurb">A short blurb.`) {
-		t.Error("playlist with description should render a blurb")
+	if !strings.Contains(s, `class="blurb">It&#39;s https://x.test`) {
+		t.Error("playlist with description should render a decoded blurb")
+	}
+	if !strings.Contains(s, "https://x.test") {
+		t.Error("blurb should contain the decoded URL")
+	}
+	if strings.Contains(s, "&amp;") {
+		t.Error("blurb should not be double-encoded (&amp; found)")
 	}
 	if strings.Count(s, `class="blurb"`) != 1 {
 		t.Errorf("expected exactly one blurb, got %d", strings.Count(s, `class="blurb"`))

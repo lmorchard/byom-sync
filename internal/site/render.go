@@ -75,6 +75,7 @@ func NewRenderer(site SiteMeta) (*Renderer, error) {
 		"providersCSV":  func(p []string) string { return strings.Join(p, ",") },
 		"playlistMeta":  playlistMeta,
 		"playlistCover": coverHref,
+		"plainText":     plainText,
 		"dirsOf":        dirsOf,
 		"yearGroupsOf":  yearGroupsOf,
 	}

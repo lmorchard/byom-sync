@@ -2,6 +2,7 @@ package site
 
 import (
 	"fmt"
+	"html"
 	"strings"
 	"time"
 
@@ -122,6 +123,14 @@ func humanDuration(totalMS int) string {
 		return fmt.Sprintf("%d hr", h)
 	}
 	return fmt.Sprintf("%d min", m)
+}
+
+// plainText decodes HTML entities in source-provided text. Spotify descriptions
+// arrive HTML-encoded (e.g. "what&#x27;s", "https:&#x2F;&#x2F;"); decoding here
+// yields plain text that html/template then escapes correctly for display,
+// avoiding the double-encoding that would otherwise show literal "&#x27;".
+func plainText(s string) string {
+	return html.UnescapeString(s)
 }
 
 // canonical joins baseURL and a root-relative urlPath into an absolute URL with
