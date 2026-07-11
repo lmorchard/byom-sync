@@ -80,7 +80,7 @@ func (JSPFExporter) Export(p playlist.Playlist, outputPath string, opts map[stri
 		doc.Playlist.Date = p.DateCreated.UTC().Format("2006-01-02T15:04:05Z")
 	}
 
-	doc.Playlist.Image = playlistImage(p)
+	doc.Playlist.Image = playlistImage(p, opts)
 
 	var pext jspfPlaylistExt
 	if !p.DateUpdated.IsZero() {
@@ -144,9 +144,18 @@ func byomID(t playlist.Track) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// playlistImage returns the playlist's own image, or the first track's image as
-// a fallback so a playlist still has cover art when none was set explicitly.
-func playlistImage(p playlist.Playlist) string {
+// playlistImage returns the playlist's image: when art_base is set, the first
+// track with a downloaded local copy (art_base + image_file); otherwise the
+// playlist's own image, or the first track's image as a fallback so a
+// playlist still has cover art when none was set explicitly.
+func playlistImage(p playlist.Playlist, opts map[string]string) string {
+	if base := opts["art_base"]; base != "" {
+		for _, t := range p.Tracks {
+			if t.ImageFile != "" {
+				return joinURL(base, t.ImageFile)
+			}
+		}
+	}
 	if p.Image != "" {
 		return p.Image
 	}
@@ -159,8 +168,9 @@ func playlistImage(p playlist.Playlist) string {
 }
 
 // jspfImage returns the JSPF image for a track: a data: URL embedded from the
-// track's downloaded local copy when embed_art is set and a copy exists, else
-// the track's source Image URL.
+// track's downloaded local copy when embed_art is set and a copy exists;
+// else, when art_base is set and a local copy exists, art_base + image_file;
+// else the track's source Image URL.
 func jspfImage(t playlist.Track, opts map[string]string) string {
 	if opts["embed_art"] == "true" && t.ImageFile != "" {
 		abs := filepath.Join(opts["art_root"], filepath.FromSlash(t.ImageFile))
@@ -170,7 +180,15 @@ func jspfImage(t playlist.Track, opts map[string]string) string {
 		}
 		// read failed → fall through to the URL
 	}
+	if base := opts["art_base"]; base != "" && t.ImageFile != "" {
+		return joinURL(base, t.ImageFile)
+	}
 	return t.Image
+}
+
+// joinURL joins a base URL and a relative path with exactly one slash.
+func joinURL(base, rel string) string {
+	return strings.TrimRight(base, "/") + "/" + strings.TrimLeft(rel, "/")
 }
 
 func ctypeForExt(ext string) string {
