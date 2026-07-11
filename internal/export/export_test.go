@@ -178,6 +178,41 @@ func TestJSPFExport_ExplicitPlaylistImageWins(t *testing.T) {
 	}
 }
 
+func TestJSPFExport_EmbedArt(t *testing.T) {
+	root := t.TempDir()
+	// a downloaded local cover
+	rel := filepath.Join("art", "ab", "abcd.jpg")
+	if err := os.MkdirAll(filepath.Join(root, "art", "ab"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, rel), []byte("JPEGBYTES"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	p := playlist.Playlist{Title: "T", Tracks: []playlist.Track{
+		{Title: "Has Local", Artist: "A", Image: "https://x/c.jpg", ImageFile: "art/ab/abcd.jpg"},
+		{Title: "URL Only", Artist: "B", Image: "https://x/d.jpg"},
+	}}
+	out := filepath.Join(t.TempDir(), "e.jspf")
+	err := (JSPFExporter{}).Export(p, out, map[string]string{"embed_art": "true", "art_root": root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(out)
+	var doc map[string]any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("json: %v", err)
+	}
+	tracks := doc["playlist"].(map[string]any)["track"].([]any)
+	t0 := tracks[0].(map[string]any)["image"].(string)
+	if !strings.HasPrefix(t0, "data:image/jpeg;base64,") {
+		t.Errorf("track with a local copy should embed data URL, got %q", t0)
+	}
+	t1 := tracks[1].(map[string]any)["image"].(string)
+	if t1 != "https://x/d.jpg" {
+		t.Errorf("track without a local copy should keep its URL, got %q", t1)
+	}
+}
+
 func TestMarkdownExport(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out.md")

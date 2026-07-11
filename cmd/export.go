@@ -1,6 +1,9 @@
 package cmd
 
 import (
+	"os"
+	"path/filepath"
+
 	"github.com/lmorchard/byom-sync/internal/export"
 	"github.com/spf13/cobra"
 )
@@ -16,11 +19,12 @@ var exportCmd = &cobra.Command{
 }
 
 var (
-	exportInput  string
-	exportOut    string
-	exportPrefix string
-	exportExt    string
-	exportTmpl   string
+	exportInput    string
+	exportOut      string
+	exportPrefix   string
+	exportExt      string
+	exportTmpl     string
+	exportEmbedArt bool
 )
 
 var exportM3U8Cmd = &cobra.Command{
@@ -36,8 +40,23 @@ var exportJSPFCmd = &cobra.Command{
 	Use:   "jspf",
 	Short: "Export to JSPF JSON",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return export.Run(export.JSPFExporter{}, "jspf", exportInput, exportOut, nil)
+		opts := map[string]string{}
+		if exportEmbedArt {
+			opts["embed_art"] = "true"
+			opts["art_root"] = artRootOf(exportInput)
+		}
+		return export.Run(export.JSPFExporter{}, "jspf", exportInput, exportOut, opts)
 	},
+}
+
+// artRootOf returns the directory to resolve a track's hub-relative ImageFile
+// against: the input's own directory when it's a file, else the input itself.
+// Mirrors the same logic used by "resolve art --download".
+func artRootOf(input string) string {
+	if fi, err := os.Stat(input); err == nil && !fi.IsDir() {
+		return filepath.Dir(input)
+	}
+	return input
 }
 
 var exportMarkdownCmd = &cobra.Command{
@@ -65,4 +84,6 @@ func init() {
 	_ = exportM3U8Cmd.MarkFlagRequired("lib-prefix")
 
 	exportMarkdownCmd.Flags().StringVar(&exportTmpl, "template", "", "custom Markdown template file (default: embedded)")
+
+	exportJSPFCmd.Flags().BoolVar(&exportEmbedArt, "embed-art", false, "inline downloaded cover art as data: URLs (run 'resolve art --download' first)")
 }

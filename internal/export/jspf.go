@@ -2,9 +2,12 @@ package export
 
 import (
 	"crypto/sha1"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/lmorchard/byom-sync/internal/playlist"
 )
@@ -67,7 +70,7 @@ type jspfResolved struct {
 	YouTube string `json:"youtube,omitempty"`
 }
 
-func (JSPFExporter) Export(p playlist.Playlist, outputPath string, _ map[string]string) error {
+func (JSPFExporter) Export(p playlist.Playlist, outputPath string, opts map[string]string) error {
 	doc := jspfDoc{Playlist: jspfPlaylist{
 		Title:   p.Title,
 		Creator: p.Creator,
@@ -95,7 +98,7 @@ func (JSPFExporter) Export(p playlist.Playlist, outputPath string, _ map[string]
 			Title:    t.Title,
 			Creator:  t.Artist,
 			Album:    t.Album,
-			Image:    t.Image,
+			Image:    jspfImage(t, opts),
 			Duration: (t.DurationMS + 500) / 1000, // round to nearest second
 		}
 		if t.ISRC != "" {
@@ -153,4 +156,32 @@ func playlistImage(p playlist.Playlist) string {
 		}
 	}
 	return ""
+}
+
+// jspfImage returns the JSPF image for a track: a data: URL embedded from the
+// track's downloaded local copy when embed_art is set and a copy exists, else
+// the track's source Image URL.
+func jspfImage(t playlist.Track, opts map[string]string) string {
+	if opts["embed_art"] == "true" && t.ImageFile != "" {
+		abs := filepath.Join(opts["art_root"], filepath.FromSlash(t.ImageFile))
+		if data, err := os.ReadFile(abs); err == nil {
+			ct := ctypeForExt(filepath.Ext(t.ImageFile))
+			return "data:" + ct + ";base64," + base64.StdEncoding.EncodeToString(data)
+		}
+		// read failed → fall through to the URL
+	}
+	return t.Image
+}
+
+func ctypeForExt(ext string) string {
+	switch strings.ToLower(ext) {
+	case ".png":
+		return "image/png"
+	case ".webp":
+		return "image/webp"
+	case ".gif":
+		return "image/gif"
+	default:
+		return "image/jpeg"
+	}
 }
