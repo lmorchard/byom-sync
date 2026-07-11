@@ -54,6 +54,9 @@ func Build(opts Options) error {
 	if err := WriteIndexJSON(opts.OutDir, root); err != nil {
 		return err
 	}
+	if err := WriteCoverArt(opts.HubDir, opts.OutDir, root); err != nil {
+		return err
+	}
 	if err := r.RenderSite(opts.OutDir, root); err != nil {
 		return err
 	}
