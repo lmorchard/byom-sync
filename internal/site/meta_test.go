@@ -44,3 +44,25 @@ func TestMetaHelpers(t *testing.T) {
 		t.Errorf("root canonical = %q", got)
 	}
 }
+
+func TestDateRange(t *testing.T) {
+	feb23 := time.Date(2023, 2, 1, 0, 0, 0, 0, time.UTC)
+	jun26 := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
+	feb23b := time.Date(2023, 2, 15, 0, 0, 0, 0, time.UTC) // same month as feb23
+	var zero time.Time
+	cases := []struct {
+		c, u time.Time
+		want string
+	}{
+		{feb23, jun26, "Feb 2023 – Jun 2026"},
+		{feb23, feb23b, "Feb 2023"}, // same month-year collapses
+		{feb23, zero, "Feb 2023"},
+		{zero, jun26, "Jun 2026"},
+		{zero, zero, ""},
+	}
+	for _, tc := range cases {
+		if got := dateRange(tc.c, tc.u); got != tc.want {
+			t.Errorf("dateRange(%v,%v) = %q, want %q", tc.c, tc.u, got, tc.want)
+		}
+	}
+}

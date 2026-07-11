@@ -15,6 +15,7 @@ type IndexNode struct {
 	Path     string      `json:"path"`
 	IsDir    bool        `json:"isDir"`
 	Meta     string      `json:"meta,omitempty"` // playlist summary line (leaves only)
+	Year     int         `json:"year,omitempty"`
 	Children []IndexNode `json:"children,omitempty"`
 }
 
@@ -30,6 +31,9 @@ func toIndexNodes(children []*Node) []IndexNode {
 		}
 		if !c.IsDir {
 			n.Meta = playlistMeta(c.Playlist)
+			if !c.Playlist.DateUpdated.IsZero() {
+				n.Year = c.Playlist.DateUpdated.Year()
+			}
 		}
 		out = append(out, n)
 	}

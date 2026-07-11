@@ -3,6 +3,7 @@ package site
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/lmorchard/byom-sync/internal/playlist"
 )
@@ -30,6 +31,30 @@ func firstParagraph(md string) string {
 	return ""
 }
 
+func monthYear(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.Format("Jan 2006")
+}
+
+// dateRange formats a created–updated span as "Feb 2023 – Jun 2026", collapsing
+// to a single value when both fall in the same month, and to whichever side is
+// present when only one is.
+func dateRange(created, updated time.Time) string {
+	c, u := monthYear(created), monthYear(updated)
+	switch {
+	case c == "" && u == "":
+		return ""
+	case c == "":
+		return u
+	case u == "" || c == u:
+		return c
+	default:
+		return c + " – " + u
+	}
+}
+
 // playlistMeta renders a light one-line summary of a playlist — track count,
 // total duration, and month-year — mirroring what byom-player shows, e.g.
 // "16 tracks · 1 hr 8 min · Jul 2026". Segments with no data are omitted
@@ -44,8 +69,8 @@ func playlistMeta(p *playlist.Playlist) string {
 	if d := humanDuration(totalMS); d != "" {
 		parts = append(parts, d)
 	}
-	if !p.DateCreated.IsZero() {
-		parts = append(parts, p.DateCreated.Format("Jan 2006"))
+	if r := dateRange(p.DateCreated, p.DateUpdated); r != "" {
+		parts = append(parts, r)
 	}
 	return strings.Join(parts, " · ")
 }

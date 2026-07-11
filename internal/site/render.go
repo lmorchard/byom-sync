@@ -74,6 +74,8 @@ func NewRenderer(site SiteMeta) (*Renderer, error) {
 		"markdown":     renderMarkdown,
 		"providersCSV": func(p []string) string { return strings.Join(p, ",") },
 		"playlistMeta": playlistMeta,
+		"dirsOf":       dirsOf,
+		"yearGroupsOf": yearGroupsOf,
 	}
 	tmpl, err := template.New("site").Funcs(funcs).ParseFS(embedded, "templates/*.html")
 	if err != nil {

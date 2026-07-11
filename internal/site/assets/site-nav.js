@@ -26,13 +26,30 @@ class ByomSiteNav extends HTMLElement {
     });
   }
   render(nodes, here) {
-    return `<ul>${nodes.map((n) => {
+    const dirs = nodes.filter((n) => n.isDir);
+    const leaves = nodes.filter((n) => !n.isDir);
+    let html = '';
+    if (dirs.length) {
+      html += `<ul>${dirs.map((n) => {
+        const active = n.path === here ? ' aria-current="page"' : '';
+        const kids = n.children && n.children.length ? this.render(n.children, here) : '';
+        return `<li><a href="${esc(n.path)}"${active}>📁 ${esc(n.title)}</a>${kids}</li>`;
+      }).join('')}</ul>`;
+    }
+    let items = '';
+    let lastYear = null;
+    for (const n of leaves) {
+      const y = n.year || 0;
+      if (y !== lastYear) {
+        items += `<li class="nav-year">${y ? y : 'Undated'}</li>`;
+        lastYear = y;
+      }
       const active = n.path === here ? ' aria-current="page"' : '';
-      const label = (n.isDir ? '📁 ' : '') + esc(n.title);
       const meta = n.meta ? `<span class="nav-meta">${esc(n.meta)}</span>` : '';
-      const kids = n.children && n.children.length ? this.render(n.children, here) : '';
-      return `<li><a href="${esc(n.path)}"${active}>${label}</a>${meta}${kids}</li>`;
-    }).join('')}</ul>`;
+      items += `<li><a href="${esc(n.path)}"${active}>${esc(n.title)}</a>${meta}</li>`;
+    }
+    if (items) html += `<ul>${items}</ul>`;
+    return html;
   }
 }
 function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }

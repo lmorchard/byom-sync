@@ -98,6 +98,34 @@ func TestRenderSite(t *testing.T) {
 	}
 }
 
+func TestRenderYearHeaders(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, "index.md"), "# hub\n")
+	mustWrite(t, filepath.Join(dir, "a.yaml"), "title: A\ndate_updated: 2020-05-01T00:00:00Z\ntracks:\n  - {title: T, artist: X}\n")
+	mustWrite(t, filepath.Join(dir, "b.yaml"), "title: B\ndate_updated: 2018-02-01T00:00:00Z\ntracks:\n  - {title: T, artist: X}\n")
+	root, err := BuildTree(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := NewRenderer(testSite())
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := t.TempDir()
+	if err := r.RenderSite(out, root); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(filepath.Join(out, "index.html"))
+	s := string(b)
+	i20, i18 := strings.Index(s, `<h2 class="year">2020</h2>`), strings.Index(s, `<h2 class="year">2018</h2>`)
+	if i20 < 0 || i18 < 0 {
+		t.Fatal("missing year headers")
+	}
+	if i20 > i18 {
+		t.Error("year headers not in descending order (2020 should precede 2018)")
+	}
+}
+
 func TestRenderPages(t *testing.T) {
 	site := testSite()
 	site.Pages = []PageLink{{Title: "About", Href: "/about/"}}

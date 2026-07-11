@@ -12,12 +12,20 @@
 </html>
 
 {{define "treeList"}}
+{{$children := .}}
+{{with dirsOf $children}}
 <ul class="tree-list">
 {{range .}}
-  <li class="{{if .IsDir}}dir{{else}}leaf{{end}}">
-    <a href="/{{.Path}}/">{{if .IsDir}}📁 {{end}}{{.Title}}</a>{{if not .IsDir}} <span class="meta">— {{playlistMeta .Playlist}}</span>{{end}}
-    {{if .IsDir}}{{template "treeList" .Children}}{{end}}
-  </li>
+  <li class="dir"><a href="/{{.Path}}/">📁 {{.Title}}</a>{{template "treeList" .Children}}</li>
 {{end}}
 </ul>
+{{end}}
+{{range yearGroupsOf $children}}
+<h2 class="year">{{.Label}}</h2>
+<ul class="tree-list">
+{{range .Playlists}}
+  <li class="leaf"><a href="/{{.Path}}/">{{.Title}}</a> <span class="meta">— {{playlistMeta .Playlist}}</span></li>
+{{end}}
+</ul>
+{{end}}
 {{end}}

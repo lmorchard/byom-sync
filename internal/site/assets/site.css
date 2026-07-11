@@ -10,6 +10,7 @@ a { color:var(--accent); }
 .tree-list { list-style:none; padding-left:1rem; }
 .tree-list > li { margin:.6rem 0; }
 .tree-list .meta { color:var(--muted); font-size:.9rem; }
+.year { font-size:.8rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:1.6rem 0 .4rem; padding-bottom:.3rem; border-bottom:1px solid #333; }
 .intro { opacity:.9; }
 .site-footer { margin-top:2rem; color:var(--muted); font-size:.8rem; }
 .tracklist { color:var(--muted); }
@@ -30,6 +31,7 @@ byom-site-nav { display:block; }
 .site-nav a:hover { opacity:1; }
 .site-nav a[aria-current="page"] { color:var(--accent); opacity:1; font-weight:600; }
 .site-nav .nav-meta { display:block; color:var(--muted); font-size:.72rem; line-height:1.35; }
+.site-nav .nav-year { list-style:none; font-size:.7rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:.9rem 0 .25rem; }
 @media (max-width:48rem) {
   body.playlist, body.folder { height:auto; display:block; overflow:visible; }
   .layout { grid-template-columns:1fr; }
