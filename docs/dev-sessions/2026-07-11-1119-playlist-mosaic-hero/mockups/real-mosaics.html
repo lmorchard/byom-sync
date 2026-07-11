@@ -1,0 +1,26 @@
+<h2>Real mosaics from the corpus — feel pass</h2>
+<p class="subtitle">Six generated from actual playlists (of 59) during implementation. Geometry as shipped: 1200×1200, black bg, <strong>20px padding, 20px gap, 10px sub-gap</strong>, JPEG q88. This pass confirmed the subjective spacing/framing (approved as-is).</p>
+
+<style>
+  .grid { display:grid; grid-template-columns:repeat(3, 260px); gap:1.5rem; justify-content:center; margin-top:1rem; }
+  .grid figure { margin:0; }
+  .grid img { width:260px; height:260px; display:block; border-radius:6px; background:#000; }
+  .grid figcaption { font-size:.72rem; color:#888; margin-top:.35rem; text-align:center; }
+  .big { display:flex; gap:1.5rem; justify-content:center; margin-top:2rem; }
+  .big img { width:360px; height:360px; border-radius:6px; }
+  .big .label { font-size:.75rem; color:#aaa; align-self:center; max-width:14rem; }
+</style>
+
+<div class="grid">
+  <figure><img src="m1.jpg"><figcaption>m1 · largest file (dense/fractal)</figcaption></figure>
+  <figure><img src="m2.jpg"><figcaption>m2</figcaption></figure>
+  <figure><img src="m3.jpg"><figcaption>m3</figcaption></figure>
+  <figure><img src="m4.jpg"><figcaption>m4</figcaption></figure>
+  <figure><img src="m5.jpg"><figcaption>m5</figcaption></figure>
+  <figure><img src="m6.jpg"><figcaption>m6 · smallest file (sparse / 1–2 covers)</figcaption></figure>
+</div>
+
+<div class="big">
+  <img src="m1.jpg">
+  <p class="label">m1 at a larger size — the 20px gaps read as intentional gutters and the black mat framing works. Approved without changes.</p>
+</div>
