@@ -1,0 +1,56 @@
+<h2>Mosaic base look — full playlist (4+ distinct album covers)</h2>
+<p class="subtitle">This is the common case. Which density / framing reads best as a playlist hero? (Tiles here are stand-in "covers" — the real ones are your most-featured albums.)</p>
+
+<style>
+  .mz { width: 240px; height: 240px; display: grid; overflow: hidden; background:#000; }
+  .mz img { width: 100%; height: 100%; object-fit: cover; display:block; }
+  .mz.g2 { grid-template-columns: 1fr 1fr; }
+  .mz.g2.gap { gap: 6px; background:#111; padding:6px; }
+  .mz.g3 { grid-template-columns: repeat(3,1fr); }
+  .mz.round { border-radius: 14px; }
+  .cap { font-size:.8rem; color:#888; margin-top:.4rem; }
+</style>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="display:flex;justify-content:center;padding:1rem;">
+      <div class="mz g2">
+        <img src="https://picsum.photos/seed/byom1/200"><img src="https://picsum.photos/seed/byom2/200">
+        <img src="https://picsum.photos/seed/byom3/200"><img src="https://picsum.photos/seed/byom4/200">
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A · 2×2 seamless</h3>
+      <p>Four covers flush, no gaps. Bold, poster-like; each cover stays large and legible at thumbnail size.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="display:flex;justify-content:center;padding:1rem;">
+      <div class="mz g2 gap">
+        <img src="https://picsum.photos/seed/byom1/200"><img src="https://picsum.photos/seed/byom2/200">
+        <img src="https://picsum.photos/seed/byom3/200"><img src="https://picsum.photos/seed/byom4/200">
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B · 2×2 with gaps</h3>
+      <p>Thin gutters on a dark mat. Contact-sheet / grid feel; reads clearly as "multiple albums" rather than one image.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="display:flex;justify-content:center;padding:1rem;">
+      <div class="mz g3">
+        <img src="https://picsum.photos/seed/byom1/150"><img src="https://picsum.photos/seed/byom2/150"><img src="https://picsum.photos/seed/byom5/150">
+        <img src="https://picsum.photos/seed/byom3/150"><img src="https://picsum.photos/seed/byom4/150"><img src="https://picsum.photos/seed/byom6/150">
+        <img src="https://picsum.photos/seed/byom7/150"><img src="https://picsum.photos/seed/byom8/150"><img src="https://picsum.photos/seed/byom9/150">
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C · 3×3 seamless</h3>
+      <p>Nine covers, more variety — but tiles get small and muddy at hero size, and needs 9 distinct albums to fill.</p>
+    </div>
+  </div>
+</div>
+
+<p class="cap">Corner rounding (square vs. rounded) is a small polish we can set after — don't factor it in here.</p>

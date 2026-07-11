@@ -47,3 +47,6 @@ dist/
 
 # Claude Code Playwright MCP scratch
 .playwright-mcp/
+
+# Superpowers scratch (SDD ledger, brainstorming mockups)
+.superpowers/

@@ -1,0 +1,63 @@
+<h2>Fractal subdivision — scaling to longer playlists</h2>
+<p class="subtitle">Most-featured albums keep full quadrants; the long tail packs into subdivided quadrants (each a 2×2 of sub-covers). One level of subdivision only — sub-quadrants don't subdivide further, to stay legible. Gap style from your pick (B).</p>
+
+<style>
+  .mz { width: 220px; height: 220px; display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; gap:6px; background:#111; padding:6px; box-sizing:border-box; }
+  .mz img { width:100%; height:100%; object-fit:cover; display:block; }
+  .sub { display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; gap:3px; }
+  .panel { display:flex; flex-direction:column; align-items:center; gap:.5rem; }
+  .panel .label { font-size:.8rem; color:#aaa; text-align:center; max-width:220px; }
+  .row { display:flex; gap:2.5rem; flex-wrap:wrap; justify-content:center; margin-top:1rem; }
+</style>
+
+<div class="row">
+  <div class="panel">
+    <div class="mz">
+      <img src="https://picsum.photos/seed/byom1/200">
+      <img src="https://picsum.photos/seed/byom2/200">
+      <img src="https://picsum.photos/seed/byom3/200">
+      <div class="sub">
+        <img src="https://picsum.photos/seed/byom4/100"><img src="https://picsum.photos/seed/byom5/100">
+        <img src="https://picsum.photos/seed/byom6/100"><img src="https://picsum.photos/seed/byom7/100">
+      </div>
+    </div>
+    <div class="label"><strong>5–7 albums</strong><br>3 whole + 1 subdivided quadrant (shows up to 7)</div>
+  </div>
+
+  <div class="panel">
+    <div class="mz">
+      <img src="https://picsum.photos/seed/byom1/200">
+      <img src="https://picsum.photos/seed/byom2/200">
+      <div class="sub">
+        <img src="https://picsum.photos/seed/byom4/100"><img src="https://picsum.photos/seed/byom5/100">
+        <img src="https://picsum.photos/seed/byom6/100"><img src="https://picsum.photos/seed/byom7/100">
+      </div>
+      <div class="sub">
+        <img src="https://picsum.photos/seed/byom8/100"><img src="https://picsum.photos/seed/byom9/100">
+        <img src="https://picsum.photos/seed/byom10/100"><img src="https://picsum.photos/seed/byom11/100">
+      </div>
+    </div>
+    <div class="label"><strong>8–10 albums</strong><br>2 whole + 2 subdivided (shows up to 10)</div>
+  </div>
+
+  <div class="panel">
+    <div class="mz">
+      <img src="https://picsum.photos/seed/byom1/200">
+      <div class="sub">
+        <img src="https://picsum.photos/seed/byom4/100"><img src="https://picsum.photos/seed/byom5/100">
+        <img src="https://picsum.photos/seed/byom6/100"><img src="https://picsum.photos/seed/byom7/100">
+      </div>
+      <div class="sub">
+        <img src="https://picsum.photos/seed/byom8/100"><img src="https://picsum.photos/seed/byom9/100">
+        <img src="https://picsum.photos/seed/byom10/100"><img src="https://picsum.photos/seed/byom11/100">
+      </div>
+      <div class="sub">
+        <img src="https://picsum.photos/seed/byom12/100"><img src="https://picsum.photos/seed/byom13/100">
+        <img src="https://picsum.photos/seed/byom14/100"><img src="https://picsum.photos/seed/byom15/100">
+      </div>
+    </div>
+    <div class="label"><strong>11–13 albums</strong><br>1 whole + 3 subdivided (shows up to 13)</div>
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top:1.5rem">Rule: rank distinct covers by track count; the top-ranked stay whole, the least-featured quadrants subdivide to absorb the tail. ≤4 distinct → plain 2×2. &gt;13 → cap at 3 subdivided (rest omitted).</p>
