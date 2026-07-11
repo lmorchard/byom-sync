@@ -34,6 +34,29 @@ func samplePlaylist() playlist.Playlist {
 	}
 }
 
+func TestJSPFExportNoPlaylistExtensionWhenDatesZero(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "out.jspf.json")
+	// samplePlaylist has zero DateUpdated/DateImported, so no playlist-level
+	// byom extension should be emitted.
+	if err := (JSPFExporter{}).Export(samplePlaylist(), out, nil); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(out)
+
+	var doc struct {
+		Playlist struct {
+			Extension map[string][]json.RawMessage `json:"extension"`
+		} `json:"playlist"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("unmarshal: %v\n%s", err, raw)
+	}
+	if len(doc.Playlist.Extension) != 0 {
+		t.Errorf("expected no playlist-level extension for zero dates, got: %v", doc.Playlist.Extension)
+	}
+}
+
 func TestM3U8Export(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out.m3u8")

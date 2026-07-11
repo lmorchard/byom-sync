@@ -15,7 +15,8 @@ const (
 
 // Merge combines a locally-stored playlist with a freshly-fetched remote one.
 //
-// Metadata (Title, Creator, DateCreated, SpotifyID) always comes from remote.
+// Metadata (Title, Creator, DateImported, SpotifyID) comes from remote;
+// DateCreated/DateUpdated are recomputed post-merge via RefreshDates.
 //
 //	Archive: union by Track.Key(). Remote tracks are marked SpotifyPresent=true
 //	         with any orphan date cleared. Local tracks absent from the remote are
