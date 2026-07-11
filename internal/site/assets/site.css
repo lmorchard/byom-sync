@@ -40,3 +40,17 @@ byom-site-nav { display:block; }
 
 body.embed { padding:.5rem; }
 .embed-attribution { display:block; font-size:.75rem; color:var(--muted); margin-top:.4rem; }
+
+.playlist-cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(18rem,1fr)); gap:1rem; margin:.4rem 0 0; }
+.playlist-card { display:flex; gap:.75rem; align-items:flex-start; padding:.55rem; border-radius:8px; text-decoration:none; color:var(--fg); background:#1c1c1c; }
+.playlist-card:hover { background:#232323; }
+.playlist-card .cover { width:5.25rem; height:5.25rem; border-radius:6px; object-fit:cover; flex:none; background:#222; }
+.playlist-card .cover.placeholder { background:linear-gradient(135deg,#2a2a2a,#1a1a1a); }
+.playlist-card .body { display:flex; flex-direction:column; min-width:0; overflow-wrap:anywhere; }
+.playlist-card .title { font-weight:600; }
+.playlist-card .meta { color:var(--muted); font-size:.82rem; margin-top:.15rem; }
+.playlist-card .blurb { color:#c2c2c2; font-size:.85rem; margin-top:.35rem; }
+
+.site-nav .nav-leaf { display:flex; gap:.5rem; align-items:center; }
+.site-nav .nav-cover { width:2.2rem; height:2.2rem; border-radius:4px; object-fit:cover; flex:none; background:#222; }
+.site-nav .nav-text { display:flex; flex-direction:column; min-width:0; }

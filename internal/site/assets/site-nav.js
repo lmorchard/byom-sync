@@ -46,7 +46,8 @@ class ByomSiteNav extends HTMLElement {
       }
       const active = n.path === here ? ' aria-current="page"' : '';
       const meta = n.meta ? `<span class="nav-meta">${esc(n.meta)}</span>` : '';
-      items += `<li><a href="${esc(n.path)}"${active}>${esc(n.title)}</a>${meta}</li>`;
+      const cover = n.image ? `<img class="nav-cover" src="${esc(n.image)}" alt="" loading="lazy">` : '';
+      items += `<li><a class="nav-leaf" href="${esc(n.path)}"${active}>${cover}<span class="nav-text">${esc(n.title)}${meta}</span></a></li>`;
     }
     if (items) html += `<ul>${items}</ul>`;
     return html;

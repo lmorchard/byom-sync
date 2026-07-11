@@ -71,11 +71,13 @@ type Renderer struct {
 // NewRenderer parses the embedded templates.
 func NewRenderer(site SiteMeta) (*Renderer, error) {
 	funcs := template.FuncMap{
-		"markdown":     renderMarkdown,
-		"providersCSV": func(p []string) string { return strings.Join(p, ",") },
-		"playlistMeta": playlistMeta,
-		"dirsOf":       dirsOf,
-		"yearGroupsOf": yearGroupsOf,
+		"markdown":      renderMarkdown,
+		"providersCSV":  func(p []string) string { return strings.Join(p, ",") },
+		"playlistMeta":  playlistMeta,
+		"playlistCover": coverHref,
+		"plainText":     plainText,
+		"dirsOf":        dirsOf,
+		"yearGroupsOf":  yearGroupsOf,
 	}
 	tmpl, err := template.New("site").Funcs(funcs).ParseFS(embedded, "templates/*.html")
 	if err != nil {
@@ -192,7 +194,7 @@ func (r *Renderer) renderPlaylist(outDir string, node *Node, crumbs []Crumb) err
 	base := pageData{
 		Site:      r.Site,
 		Title:     node.Title,
-		Desc:      node.Playlist.Description,
+		Desc:      plainText(node.Playlist.Description),
 		Image:     playlistImage(node.Playlist, r.Site.BaseURL),
 		Canonical: canonical(r.Site.BaseURL, node.Path),
 		Crumbs:    crumbs,

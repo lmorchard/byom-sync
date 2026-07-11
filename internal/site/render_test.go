@@ -42,10 +42,20 @@ func TestRenderSite(t *testing.T) {
 	if !strings.Contains(landing, "Welcome") || !strings.Contains(landing, "/synthpop/") {
 		t.Error("landing missing intro or tree link")
 	}
-	// Each playlist in the tree carries a light metadata line (fixture leaves
-	// have a single track, no duration/date).
-	if !strings.Contains(landing, `class="meta">— 1 track`) {
-		t.Error("landing tree missing per-playlist metadata line")
+	// Playlists render as media cards; the top-level leaf carries a remote cover.
+	if !strings.Contains(landing, `class="playlist-card"`) {
+		t.Error("landing missing playlist cards")
+	}
+	if !strings.Contains(landing, `<img class="cover" src="http://img/1.jpg"`) {
+		t.Error("landing card missing cover image")
+	}
+	if !strings.Contains(landing, `class="meta">1 track`) {
+		t.Error("landing card missing metadata line")
+	}
+	// The synthpop child (bleep-bloop-bop) has no cover → placeholder box.
+	folderPage := read("synthpop/index.html")
+	if !strings.Contains(folderPage, `class="cover placeholder"`) {
+		t.Error("cover-less playlist should render a placeholder box")
 	}
 	pl := read("synthpop/bleep-bloop-bop/index.html")
 	if !strings.Contains(pl, `<byom-player`) || !strings.Contains(pl, `src="/synthpop/bleep-bloop-bop/playlist.jspf.json"`) {
@@ -157,5 +167,73 @@ func TestRenderPages(t *testing.T) {
 	}
 	if !strings.Contains(s, `href="https://mix.test/pages/about/"`) {
 		t.Error("page missing canonical URL")
+	}
+}
+
+func TestRenderCardBlurb(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, "index.md"), "# hub\n")
+	mustWrite(t, filepath.Join(dir, "a.yaml"),
+		"title: A\ndescription: It&#x27;s https:&#x2F;&#x2F;x.test\ntracks:\n  - {title: T, artist: X}\n")
+	mustWrite(t, filepath.Join(dir, "b.yaml"),
+		"title: B\ntracks:\n  - {title: T, artist: X}\n")
+	root, err := BuildTree(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := NewRenderer(testSite())
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := t.TempDir()
+	if err := r.RenderSite(out, root); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(filepath.Join(out, "index.html"))
+	s := string(b)
+	if !strings.Contains(s, `class="blurb">It&#39;s https://x.test`) {
+		t.Error("playlist with description should render a decoded blurb")
+	}
+	if !strings.Contains(s, "https://x.test") {
+		t.Error("blurb should contain the decoded URL")
+	}
+	if strings.Contains(s, "&amp;") {
+		t.Error("blurb should not be double-encoded (&amp; found)")
+	}
+	if strings.Count(s, `class="blurb"`) != 1 {
+		t.Errorf("expected exactly one blurb, got %d", strings.Count(s, `class="blurb"`))
+	}
+}
+
+func TestRenderPlaylistDescriptionDecoded(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, "index.md"), "# hub\n")
+	mustWrite(t, filepath.Join(dir, "enc.yaml"),
+		"title: Enc\nspotify_id: xyz\ndescription: It&#x27;s at https:&#x2F;&#x2F;x.test\ntracks:\n  - {title: T, artist: A}\n")
+	root, err := BuildTree(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := NewRenderer(testSite())
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := t.TempDir()
+	if err := r.RenderSite(out, root); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join(out, "enc", "index.html"))
+	if err != nil {
+		t.Fatalf("playlist page: %v", err)
+	}
+	s := string(b)
+	if !strings.Contains(s, `property="og:description" content="It&#39;s at https://x.test"`) {
+		t.Error("og:description should render the decoded description")
+	}
+	if !strings.Contains(s, `name="description" content="It&#39;s at https://x.test"`) {
+		t.Error("meta description should render the decoded description")
+	}
+	if strings.Contains(s, "&amp;") {
+		t.Error("description meta tags should not be double-encoded (&amp; found)")
 	}
 }

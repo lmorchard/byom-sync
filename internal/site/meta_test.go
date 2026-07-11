@@ -77,6 +77,27 @@ func TestPlaylistImage_ExplicitHeroWins(t *testing.T) {
 	}
 }
 
+func TestCoverHref(t *testing.T) {
+	cases := []struct {
+		name string
+		p    *playlist.Playlist
+		want string
+	}{
+		{"playlist hero file → root-relative", &playlist.Playlist{ImageFile: "art/aa/x.jpg"}, "/art/aa/x.jpg"},
+		{"playlist remote image passthrough", &playlist.Playlist{Image: "http://img/pl.jpg"}, "http://img/pl.jpg"},
+		{"first track local beats earlier remote", &playlist.Playlist{Tracks: []playlist.Track{{Image: "http://img/0.jpg"}, {ImageFile: "art/bb/y.jpg"}}}, "/art/bb/y.jpg"},
+		{"first track remote fallback", &playlist.Playlist{Tracks: []playlist.Track{{}, {Image: "http://img/2.jpg"}}}, "http://img/2.jpg"},
+		{"nothing", &playlist.Playlist{Tracks: []playlist.Track{{}}}, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := coverHref(tc.p); got != tc.want {
+				t.Errorf("coverHref = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestDateRange(t *testing.T) {
 	feb23 := time.Date(2023, 2, 1, 0, 0, 0, 0, time.UTC)
 	jun26 := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)

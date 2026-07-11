@@ -43,6 +43,31 @@ func TestWriteIndexJSON(t *testing.T) {
 	}
 }
 
+func TestIndexNodeImage(t *testing.T) {
+	root, err := BuildTree(writeFixtureHub(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := t.TempDir()
+	if err := WriteIndexJSON(out, root); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(filepath.Join(out, "site-index.json"))
+	var nodes []IndexNode
+	if err := json.Unmarshal(data, &nodes); err != nil {
+		t.Fatal(err)
+	}
+	if nodes[1].Name != "2014-top-songs" {
+		t.Fatalf("expected 2014-top-songs leaf, got %q", nodes[1].Name)
+	}
+	if nodes[1].Image != "http://img/1.jpg" {
+		t.Errorf("leaf Image = %q, want http://img/1.jpg", nodes[1].Image)
+	}
+	if nodes[0].Image != "" {
+		t.Errorf("directory Image = %q, want empty", nodes[0].Image)
+	}
+}
+
 func TestIndexNodeYear(t *testing.T) {
 	dir := t.TempDir()
 	mustWrite(t, filepath.Join(dir, "a.yaml"), "title: A\ndate_updated: 2019-04-01T00:00:00Z\ntracks:\n  - {title: T, artist: X}\n")
