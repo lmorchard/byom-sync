@@ -213,6 +213,33 @@ func TestJSPFExport_EmbedArt(t *testing.T) {
 	}
 }
 
+func TestJSPFExport_ArtBase(t *testing.T) {
+	p := playlist.Playlist{Title: "T", Tracks: []playlist.Track{
+		{Title: "Local", Artist: "A", Image: "https://x/c.jpg", ImageFile: "art/ab/abcd.jpg"},
+		{Title: "URLOnly", Artist: "B", Image: "https://x/d.jpg"},
+	}}
+	out := filepath.Join(t.TempDir(), "b.jspf")
+	if err := (JSPFExporter{}).Export(p, out, map[string]string{"art_base": "https://site.example"}); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(out)
+	var doc map[string]any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("json: %v", err)
+	}
+	pl := doc["playlist"].(map[string]any)
+	if pl["image"] != "https://site.example/art/ab/abcd.jpg" {
+		t.Errorf("playlist image should use art_base+image_file: %v", pl["image"])
+	}
+	tracks := pl["track"].([]any)
+	if got := tracks[0].(map[string]any)["image"]; got != "https://site.example/art/ab/abcd.jpg" {
+		t.Errorf("track w/ local copy → art_base URL, got %v", got)
+	}
+	if got := tracks[1].(map[string]any)["image"]; got != "https://x/d.jpg" {
+		t.Errorf("track w/o local copy → source URL, got %v", got)
+	}
+}
+
 func TestMarkdownExport(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out.md")

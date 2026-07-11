@@ -13,7 +13,7 @@ func TestWriteJSPF(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := t.TempDir()
-	if err := WriteJSPF(out, root); err != nil {
+	if err := WriteJSPF(out, root, "https://site.example"); err != nil {
 		t.Fatalf("WriteJSPF: %v", err)
 	}
 	for _, rel := range []string{

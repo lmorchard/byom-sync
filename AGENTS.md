@@ -61,7 +61,11 @@ YouTube resolution cache in `internal/rcache/` — an index, not a source of tru
   `site-index.json` + `<byom-site-nav>`, OG metadata, RSS. Reuses
   `export.JSPFExporter`. Content pages (`site.pages_dir`, default `./pages`):
   `*.md` with YAML frontmatter (`title`/`order`) → `/pages/<slug>/` pages linked in the
-  header.
+  header. The site copies the hub's cover-art store (`<hub>/art/`) into the build
+  output and references downloaded images as `base_url + image_file` in each
+  `playlist.jspf.json` (via the exporter's `art_base` option) and the OpenGraph
+  image, serving downloaded art from the site to survive source-URL rot; tracks
+  without a local cached copy retain their source URLs.
 
 ## Commands (Makefile-first)
 
