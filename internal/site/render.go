@@ -194,7 +194,7 @@ func (r *Renderer) renderPlaylist(outDir string, node *Node, crumbs []Crumb) err
 	base := pageData{
 		Site:      r.Site,
 		Title:     node.Title,
-		Desc:      node.Playlist.Description,
+		Desc:      plainText(node.Playlist.Description),
 		Image:     playlistImage(node.Playlist, r.Site.BaseURL),
 		Canonical: canonical(r.Site.BaseURL, node.Path),
 		Crumbs:    crumbs,

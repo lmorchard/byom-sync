@@ -204,3 +204,36 @@ func TestRenderCardBlurb(t *testing.T) {
 		t.Errorf("expected exactly one blurb, got %d", strings.Count(s, `class="blurb"`))
 	}
 }
+
+func TestRenderPlaylistDescriptionDecoded(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, "index.md"), "# hub\n")
+	mustWrite(t, filepath.Join(dir, "enc.yaml"),
+		"title: Enc\nspotify_id: xyz\ndescription: It&#x27;s at https:&#x2F;&#x2F;x.test\ntracks:\n  - {title: T, artist: A}\n")
+	root, err := BuildTree(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := NewRenderer(testSite())
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := t.TempDir()
+	if err := r.RenderSite(out, root); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join(out, "enc", "index.html"))
+	if err != nil {
+		t.Fatalf("playlist page: %v", err)
+	}
+	s := string(b)
+	if !strings.Contains(s, `property="og:description" content="It&#39;s at https://x.test"`) {
+		t.Error("og:description should render the decoded description")
+	}
+	if !strings.Contains(s, `name="description" content="It&#39;s at https://x.test"`) {
+		t.Error("meta description should render the decoded description")
+	}
+	if strings.Contains(s, "&amp;") {
+		t.Error("description meta tags should not be double-encoded (&amp; found)")
+	}
+}
