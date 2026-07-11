@@ -10,6 +10,7 @@ a { color:var(--accent); }
 .tree-list { list-style:none; padding-left:1rem; }
 .tree-list > li { margin:.6rem 0; }
 .tree-list .meta { color:var(--muted); font-size:.9rem; }
+.year { font-size:.8rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:1.6rem 0 .4rem; padding-bottom:.3rem; border-bottom:1px solid #333; }
 .intro { opacity:.9; }
 .site-footer { margin-top:2rem; color:var(--muted); font-size:.8rem; }
 .tracklist { color:var(--muted); }
