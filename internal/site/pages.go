@@ -85,7 +85,7 @@ func LoadPages(dir string) ([]ContentPage, error) {
 func pageLinks(pages []ContentPage) []PageLink {
 	links := make([]PageLink, 0, len(pages))
 	for _, p := range pages {
-		links = append(links, PageLink{Title: p.Title, Href: "/" + p.Slug + "/"})
+		links = append(links, PageLink{Title: p.Title, Href: "/pages/" + p.Slug + "/"})
 	}
 	return links
 }

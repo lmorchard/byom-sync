@@ -36,7 +36,7 @@ func TestBuildEndToEnd(t *testing.T) {
 		"synthpop/index.html",
 		"synthpop/bleep-bloop-bop/index.html",
 		"synthpop/bleep-bloop-bop/playlist.jspf.json",
-		"about/index.html",
+		"pages/about/index.html",
 	} {
 		if _, err := os.Stat(filepath.Join(out, rel)); err != nil {
 			t.Errorf("missing output %s: %v", rel, err)
@@ -47,17 +47,21 @@ func TestBuildEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(pl), `href="/about/"`) {
+	if !strings.Contains(string(pl), `href="/pages/about/"`) {
 		t.Error("playlist page header should link the content page")
 	}
 }
 
 func TestCheckSlugCollisions(t *testing.T) {
-	root := &Node{IsDir: true, Children: []*Node{{Name: "about", IsDir: true}}}
-	if err := checkSlugCollisions(root, []ContentPage{{Slug: "about"}}); err == nil {
-		t.Error("expected collision error for matching slug")
+	pagesNode := &Node{IsDir: true, Children: []*Node{{Name: "pages", IsDir: true}}}
+	if err := checkSlugCollisions(pagesNode, []ContentPage{{Slug: "about"}}); err == nil {
+		t.Error("expected error when a top-level 'pages' folder collides with the prefix")
 	}
-	if err := checkSlugCollisions(root, []ContentPage{{Slug: "colophon"}}); err != nil {
-		t.Errorf("unexpected error for non-colliding slug: %v", err)
+	if err := checkSlugCollisions(pagesNode, nil); err != nil {
+		t.Errorf("no pages → no collision, got %v", err)
+	}
+	other := &Node{IsDir: true, Children: []*Node{{Name: "synthpop", IsDir: true}}}
+	if err := checkSlugCollisions(other, []ContentPage{{Slug: "about"}}); err != nil {
+		t.Errorf("unexpected error: %v", err)
 	}
 }

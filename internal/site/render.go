@@ -98,10 +98,10 @@ func (r *Renderer) RenderSite(outDir string, root *Node) error {
 	return r.renderChildren(outDir, root, nil)
 }
 
-// RenderPages writes one HTML page per content page at <outDir>/<slug>/index.html.
+// RenderPages writes one HTML page per content page at <outDir>/pages/<slug>/index.html.
 func (r *Renderer) RenderPages(outDir string, pages []ContentPage) error {
 	for _, p := range pages {
-		dir := filepath.Join(outDir, p.Slug)
+		dir := filepath.Join(outDir, "pages", p.Slug)
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
 		}
@@ -110,7 +110,7 @@ func (r *Renderer) RenderPages(outDir string, pages []ContentPage) error {
 				Site:      r.Site,
 				Title:     p.Title,
 				Desc:      p.Desc,
-				Canonical: canonical(r.Site.BaseURL, p.Slug),
+				Canonical: canonical(r.Site.BaseURL, "pages/"+p.Slug),
 			},
 			Body: p.Body,
 		}

@@ -51,7 +51,7 @@ YouTube resolution cache in `internal/rcache/` — an index, not a source of tru
   hub walk → per-playlist JSPF + HTML pages embedding `<byom-player>`,
   `site-index.json` + `<byom-site-nav>`, OG metadata, RSS. Reuses
   `export.JSPFExporter`. Content pages (`site.pages_dir`, default `./pages`):
-  `*.md` with YAML frontmatter (`title`/`order`) → `/slug/` pages linked in the
+  `*.md` with YAML frontmatter (`title`/`order`) → `/pages/<slug>/` pages linked in the
   header.
 
 ## Commands (Makefile-first)

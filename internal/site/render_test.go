@@ -113,7 +113,7 @@ func TestRenderPages(t *testing.T) {
 	if err := r.RenderPages(out, pages); err != nil {
 		t.Fatalf("RenderPages: %v", err)
 	}
-	b, err := os.ReadFile(filepath.Join(out, "about", "index.html"))
+	b, err := os.ReadFile(filepath.Join(out, "pages", "about", "index.html"))
 	if err != nil {
 		t.Fatalf("about page: %v", err)
 	}
@@ -127,7 +127,7 @@ func TestRenderPages(t *testing.T) {
 	if !strings.Contains(s, `property="og:title" content="About"`) {
 		t.Error("page missing OG title")
 	}
-	if !strings.Contains(s, `href="https://mix.test/about/"`) {
+	if !strings.Contains(s, `href="https://mix.test/pages/about/"`) {
 		t.Error("page missing canonical URL")
 	}
 }

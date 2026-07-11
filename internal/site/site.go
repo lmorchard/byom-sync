@@ -13,17 +13,15 @@ type Options struct {
 	Site     SiteMeta
 }
 
-// checkSlugCollisions returns an error if any content-page slug matches a
-// top-level playlist/folder slug — both render to <out>/<slug>/index.html, so a
-// collision would silently overwrite the playlist/folder page.
+// checkSlugCollisions returns an error if a top-level playlist/folder is named
+// "pages", which would collide with the content-pages path prefix (/pages/).
 func checkSlugCollisions(root *Node, pages []ContentPage) error {
-	top := make(map[string]bool, len(root.Children))
-	for _, c := range root.Children {
-		top[c.Name] = true
+	if len(pages) == 0 {
+		return nil
 	}
-	for _, p := range pages {
-		if top[p.Slug] {
-			return fmt.Errorf("content page %q collides with a top-level playlist/folder of the same slug; rename one", p.Slug)
+	for _, c := range root.Children {
+		if c.Name == "pages" {
+			return fmt.Errorf("a top-level playlist/folder named %q collides with the content-pages path prefix (/pages/); rename it", "pages")
 		}
 	}
 	return nil

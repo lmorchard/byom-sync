@@ -52,8 +52,10 @@ Body markdown here…
 
 ### Output & URLs
 
-- `pages/about.md` → `dist/about/index.html`, served at `/about/`.
-- Slug = filename stem, consistent with playlist URLs.
+- `pages/about.md` → `dist/pages/about/index.html`, served at `/pages/about/`.
+- Slug = filename stem, consistent with playlist URLs. The top-level `pages`
+  path segment is reserved for content pages; a playlist/folder named `pages`
+  would collide with it.
 
 ### Header nav
 
