@@ -29,8 +29,8 @@ func TestRefreshDates_IgnoresMissingAndUnparseable(t *testing.T) {
 	p := Playlist{
 		DateImported: time.Date(2026, 7, 8, 0, 0, 0, 0, time.UTC),
 		Tracks: []Track{
-			trackAt(""),             // no added_at
-			trackAt("not-a-date"),   // unparseable
+			trackAt(""),           // no added_at
+			trackAt("not-a-date"), // unparseable
 			trackAt("2023-03-03T03:03:03Z"),
 		},
 	}
