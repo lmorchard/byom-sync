@@ -24,10 +24,11 @@ YouTube resolution cache in `internal/rcache/` — an index, not a source of tru
 
 - `cmd/` — Cobra commands: `root`, `version`, `init`, `auth`, `sync`, `import`,
   `export`, `resolve` (subcommands `youtube`, `spotify`, `prime`, `cache stats`,
-  `cache clear`), `site`.
+  `cache clear`), `site`, `dates`.
 - `internal/playlist/` — the hub: `types.go` (`Playlist`/`Track`/`SyncState`,
   `Track.Key()`), `store.go` (`Load`/`LoadFile`/`FindFileByID`/`Save`/`Slug`),
-  `merge.go` (`Merge`, `Archive`/`Mirror`).
+  `merge.go` (`Merge`, `Archive`/`Mirror`), `dates.go` (`RefreshDates`,
+  `EnsureImportedDate`).
 - `internal/auth/` — `store.go` (token JSON cache, `ErrNoToken`), `auth.go`
   (PKCE flow, `Client`, `PersistRefreshed`).
 - `internal/spotifyfetch/` — `fetch.go` (`ParseID`, `Fetch` w/ pagination,
@@ -82,6 +83,15 @@ errcheck findings CI caught).
   `date_orphaned`); `mirror` overwrites. Playlist selection: config `playlists`
   by default, positional args override, `--all` = all owned. Catalog-removed
   stubs (empty title+artist) are filtered at fetch.
+- **Dates:** three playlist-level fields. `date_imported` is when byom-sync first
+  saw the playlist (Spotify exposes no true creation date); `date_created` and
+  `date_updated` are the earliest and latest track `added_at` (all tracks,
+  orphaned included), falling back to `date_imported` when no track has one.
+  Sync stamps/preserves `date_imported` then recomputes the pair via
+  `Playlist.RefreshDates()`; native `import` stamps `date_imported`. Run
+  `byom-sync dates` to backfill/refresh the whole hub in place — it migrates a
+  pre-change file by promoting its old `date_created` to `date_imported`
+  (`EnsureImportedDate`), and is idempotent.
 - **Native playlists:** a hub file with no `spotify_id` is a hand-authored
   ("native") playlist — just `title`/`creator`/`tracks`, where each track needs
   only `title` and `artist` (`album` optional). Provenance is *derived*, never
@@ -111,7 +121,11 @@ errcheck findings CI caught).
   verbatim; jspf uses `urn:isrc:` identifiers (or a synthesized
   `urn:byom:<sha1(ContentKey)>` when a track has no ISRC, so every track is
   addressable) + `location` (spotify_url); markdown is frontmatter + tracklist
-  table via the embedded, init-overridable template.
+  table via the embedded, init-overridable template. Playlist `date_created` maps
+  to the JSPF `date` and markdown `date`; `date_updated`/`date_imported` ride a
+  playlist-level byom extension in JSPF (namespace
+  `https://github.com/lmorchard/byom-sync`), and `date_updated` also appears as
+  markdown `updated`. (byom-player does not yet read the playlist-level extension.)
 
 ## CI / release
 
