@@ -49,7 +49,7 @@ YouTube resolution cache in `internal/rcache/` — an index, not a source of tru
   album-first then recording fallback), `resolve.go` (`Resolve` loop, `Options`,
   `Event`, `Cache`). Public APIs, no key; MusicBrainz needs a User-Agent + ~1
   req/sec pacing.
-- `internal/artstore/` — content-addressed cover-art download store: `store.go`
+- `internal/artstore/` — content-addressed cover-art download store: `artstore.go`
   (`Store.Save`/`Load` for persistent local art with dedup by image bytes).
 - `internal/rcache/` — SQLite cache with three tables in one `cache.db`:
   `resolution_cache` (YouTube), `enrichment_cache` (Spotify), and `art_cache`
