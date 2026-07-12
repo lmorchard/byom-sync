@@ -159,6 +159,49 @@ func TestJSPFExport(t *testing.T) {
 	}
 }
 
+func TestJSPFExportEmitsAnnotationFromDescription(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "annot.jspf")
+	p := samplePlaylist()
+	p.Description = "Find as many cover versions as possible."
+	if err := (JSPFExporter{}).Export(p, out, nil); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(out)
+
+	var doc struct {
+		Playlist struct {
+			Annotation string `json:"annotation"`
+		} `json:"playlist"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("unmarshal: %v\n%s", err, raw)
+	}
+	if doc.Playlist.Annotation != "Find as many cover versions as possible." {
+		t.Errorf("annotation should carry playlist description, got %q", doc.Playlist.Annotation)
+	}
+}
+
+func TestJSPFExportOmitsAnnotationWhenDescriptionEmpty(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "noannot.jspf")
+	// samplePlaylist has no Description, so annotation should be omitted entirely.
+	if err := (JSPFExporter{}).Export(samplePlaylist(), out, nil); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(out)
+
+	var doc struct {
+		Playlist map[string]any `json:"playlist"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("unmarshal: %v\n%s", err, raw)
+	}
+	if _, present := doc.Playlist["annotation"]; present {
+		t.Errorf("annotation should be omitted when description empty: %v", doc.Playlist["annotation"])
+	}
+}
+
 func TestJSPFExport_ExplicitPlaylistImageWins(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "pi.jspf")
