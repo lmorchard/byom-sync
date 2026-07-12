@@ -23,6 +23,15 @@ body.playlist, body.folder { max-width:64rem; height:100dvh; display:flex; flex-
 .layout { flex:1; min-height:0; display:grid; grid-template-columns:21.3rem minmax(0,1fr); gap:2.5rem; }
 .sidebar { min-height:0; overflow-y:auto; padding-right:1rem; }
 .layout > main { min-height:0; overflow-y:auto; }
+/* Playlist page: fit the player to the viewport so playing a track never
+   scrolls the page. main is a flex column and the player flexes to fill it; the
+   player's stage flexes within that (its tracklist scrolls), and the mounted
+   16:9 video is capped so a short viewport still leaves room for some tracklist.
+   .stage/.video are byom-player shadow parts — styled here via ::part(). */
+body.playlist .layout > main { display:flex; flex-direction:column; }
+body.playlist byom-player { display:flex; flex-direction:column; flex:1 1 auto; min-height:0; }
+body.playlist byom-player::part(stage) { flex:1 1 auto; min-height:0; }
+body.playlist byom-player::part(video) { max-height:30vh; }
 byom-site-nav { display:block; }
 .site-nav ul { list-style:none; margin:0; padding:0; font-size:.85rem; }
 .site-nav ul ul { padding-left:.9rem; }
@@ -62,6 +71,9 @@ byom-site-nav { display:block; }
     padding:1rem 1.5rem 2rem; overflow-y:auto;
     background:var(--bg); border-top:1px solid #333;
   }
+
+  /* Mobile scrolls the page, so let the video keep its full 16:9. */
+  body.playlist byom-player::part(video) { max-height:none; }
 }
 
 body.embed { padding:.5rem; }
