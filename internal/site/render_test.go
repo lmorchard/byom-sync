@@ -110,7 +110,7 @@ func TestRenderSite(t *testing.T) {
 
 func TestRenderYearHeaders(t *testing.T) {
 	dir := t.TempDir()
-	mustWrite(t, filepath.Join(dir, "index.md"), "# hub\n")
+	mustWrite(t, filepath.Join(dir, "README.md"), "# hub\n")
 	mustWrite(t, filepath.Join(dir, "a.yaml"), "title: A\ndate_updated: 2020-05-01T00:00:00Z\ntracks:\n  - {title: T, artist: X}\n")
 	mustWrite(t, filepath.Join(dir, "b.yaml"), "title: B\ndate_updated: 2018-02-01T00:00:00Z\ntracks:\n  - {title: T, artist: X}\n")
 	root, err := BuildTree(dir)
@@ -172,7 +172,7 @@ func TestRenderPages(t *testing.T) {
 
 func TestRenderCardBlurb(t *testing.T) {
 	dir := t.TempDir()
-	mustWrite(t, filepath.Join(dir, "index.md"), "# hub\n")
+	mustWrite(t, filepath.Join(dir, "README.md"), "# hub\n")
 	mustWrite(t, filepath.Join(dir, "a.yaml"),
 		"title: A\ndescription: It&#x27;s https:&#x2F;&#x2F;x.test\ntracks:\n  - {title: T, artist: X}\n")
 	mustWrite(t, filepath.Join(dir, "b.yaml"),
@@ -207,7 +207,7 @@ func TestRenderCardBlurb(t *testing.T) {
 
 func TestRenderPlaylistDescriptionDecoded(t *testing.T) {
 	dir := t.TempDir()
-	mustWrite(t, filepath.Join(dir, "index.md"), "# hub\n")
+	mustWrite(t, filepath.Join(dir, "README.md"), "# hub\n")
 	mustWrite(t, filepath.Join(dir, "enc.yaml"),
 		"title: Enc\nspotify_id: xyz\ndescription: It&#x27;s at https:&#x2F;&#x2F;x.test\ntracks:\n  - {title: T, artist: A}\n")
 	root, err := BuildTree(dir)
