@@ -23,12 +23,15 @@ type jspfDoc struct {
 }
 
 type jspfPlaylist struct {
-	Title     string                       `json:"title,omitempty"`
-	Creator   string                       `json:"creator,omitempty"`
-	Date      string                       `json:"date,omitempty"`
-	Image     string                       `json:"image,omitempty"`
-	Extension map[string][]jspfPlaylistExt `json:"extension,omitempty"`
-	Track     []jspfTrack                  `json:"track"`
+	Title   string `json:"title,omitempty"`
+	Creator string `json:"creator,omitempty"`
+	// Annotation carries the playlist's host-authored markdown description
+	// (Playlist.Description). byom-player renders it as the playlist blurb.
+	Annotation string                       `json:"annotation,omitempty"`
+	Date       string                       `json:"date,omitempty"`
+	Image      string                       `json:"image,omitempty"`
+	Extension  map[string][]jspfPlaylistExt `json:"extension,omitempty"`
+	Track      []jspfTrack                  `json:"track"`
 }
 
 type jspfTrack struct {
@@ -72,9 +75,10 @@ type jspfResolved struct {
 
 func (JSPFExporter) Export(p playlist.Playlist, outputPath string, opts map[string]string) error {
 	doc := jspfDoc{Playlist: jspfPlaylist{
-		Title:   p.Title,
-		Creator: p.Creator,
-		Track:   make([]jspfTrack, 0, len(p.Tracks)),
+		Title:      p.Title,
+		Creator:    p.Creator,
+		Annotation: p.Description,
+		Track:      make([]jspfTrack, 0, len(p.Tracks)),
 	}}
 	if !p.DateCreated.IsZero() {
 		doc.Playlist.Date = p.DateCreated.UTC().Format("2006-01-02T15:04:05Z")
