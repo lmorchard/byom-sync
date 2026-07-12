@@ -27,6 +27,14 @@ func CopyArt(hubDir, outDir string) error {
 		if d.IsDir() {
 			return os.MkdirAll(dst, 0o755)
 		}
+		// Content-addressed store: a file already present at the destination is
+		// byte-identical, so skip it (fast incremental rebuilds). The size check
+		// guards against a truncated prior copy.
+		if fi, statErr := os.Stat(dst); statErr == nil {
+			if si, infoErr := d.Info(); infoErr == nil && fi.Size() == si.Size() {
+				return nil
+			}
+		}
 		data, err := os.ReadFile(p)
 		if err != nil {
 			return err

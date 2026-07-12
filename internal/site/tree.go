@@ -47,6 +47,12 @@ func buildDir(fsDir, urlPath, name string) (*Node, error) {
 		return nil, err
 	}
 	for _, e := range entries {
+		// Skip hidden entries (dotfiles/dirs): editor/VCS cruft and macOS
+		// AppleDouble sidecars (`._*.yaml`) that would otherwise be parsed as
+		// playlists and fail on their binary contents.
+		if strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
 		if e.IsDir() {
 			// Skip the content-addressed cover-art store at the hub root
 			// (`resolve art --download` writes <hub>/art); it holds images, not

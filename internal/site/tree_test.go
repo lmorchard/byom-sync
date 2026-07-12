@@ -89,6 +89,25 @@ func TestBuildTree(t *testing.T) {
 	}
 }
 
+func TestBuildTree_SkipsDotfiles(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, "real.yaml"), "title: Real\ntracks:\n  - {title: T, artist: A}\n")
+	// macOS AppleDouble sidecar: binary junk that would crash the YAML parser.
+	mustWrite(t, filepath.Join(dir, "._real.yaml"), "\x00\x05\x16\x07Mac OS X junk")
+	mustWrite(t, filepath.Join(dir, ".DS_Store"), "\x00\x01\x02")
+	if err := os.MkdirAll(filepath.Join(dir, ".hidden"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustWrite(t, filepath.Join(dir, ".hidden", "x.yaml"), "title: Nope\n")
+	root, err := BuildTree(dir)
+	if err != nil {
+		t.Fatalf("BuildTree should skip dotfiles, got error: %v", err)
+	}
+	if len(root.Children) != 1 || root.Children[0].Name != "real" {
+		t.Errorf("expected only 'real', got %+v", root.Children)
+	}
+}
+
 func TestBuildTreeReverseChron(t *testing.T) {
 	dir := t.TempDir()
 	write := func(name, updated string) {

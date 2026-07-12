@@ -29,3 +29,30 @@ func TestCopyArt_NoArtDirIsNoop(t *testing.T) {
 		t.Errorf("missing art dir should be a no-op, got %v", err)
 	}
 }
+
+func TestCopyArt_SkipsExisting(t *testing.T) {
+	hub := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(hub, "art", "ab"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(hub, "art", "ab", "abcd.jpg"), []byte("IMG"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out := t.TempDir()
+	// Pre-seed the destination with same-SIZE sentinel content ("XXX" == 3 bytes,
+	// like "IMG"). Incremental CopyArt must skip it (same name + same size), so
+	// the sentinel survives — proving the copy was skipped, not redone.
+	if err := os.MkdirAll(filepath.Join(out, "art", "ab"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(out, "art", "ab", "abcd.jpg"), []byte("XXX"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := CopyArt(hub, out); err != nil {
+		t.Fatalf("CopyArt: %v", err)
+	}
+	got, _ := os.ReadFile(filepath.Join(out, "art", "ab", "abcd.jpg"))
+	if string(got) != "XXX" {
+		t.Errorf("existing same-size file should be skipped, got %q", got)
+	}
+}
