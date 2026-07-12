@@ -4,8 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/lmorchard/byom-sync/internal/playlist"
+	"time"
 )
 
 // writePNG writes a tiny solid PNG to <hub>/<rel> so Select/Render have bytes.
@@ -33,39 +32,95 @@ func TestGenerateMosaics(t *testing.T) {
 	hub, out := t.TempDir(), t.TempDir()
 	writePNG(t, hub, "art/aa/a.jpg")
 	writePNG(t, hub, "art/bb/b.jpg")
+	mustWrite(t, filepath.Join(hub, "needs.yaml"),
+		"title: Needs\ntracks:\n  - {title: '1', artist: A, image_file: art/aa/a.jpg}\n  - {title: '2', artist: B, image_file: art/bb/b.jpg}\n")
+	mustWrite(t, filepath.Join(hub, "explicit.yaml"),
+		"title: Explicit\nimage: https://x/hero.jpg\ntracks:\n  - {title: '1', artist: A, image_file: art/aa/a.jpg}\n")
+	mustWrite(t, filepath.Join(hub, "bare.yaml"),
+		"title: Bare\ntracks:\n  - {title: '1', artist: A}\n")
 
-	needs := &playlist.Playlist{Title: "Needs", Tracks: []playlist.Track{
-		{Title: "1", ImageFile: "art/aa/a.jpg"},
-		{Title: "2", ImageFile: "art/bb/b.jpg"},
-	}}
-	explicit := &playlist.Playlist{Title: "Explicit", Image: "https://x/hero.jpg",
-		Tracks: []playlist.Track{{Title: "1", ImageFile: "art/aa/a.jpg"}}}
-	bare := &playlist.Playlist{Title: "Bare", Tracks: []playlist.Track{{Title: "1"}}}
-
-	root := &Node{IsDir: true, Children: []*Node{
-		{Playlist: needs}, {Playlist: explicit}, {Playlist: bare},
-	}}
-
+	root, err := BuildTree(hub)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := GenerateMosaics(hub, out, root); err != nil {
 		t.Fatal(err)
 	}
-
-	// Playlist with covers → ImageFile set to an art/mosaic/*.jpg that exists.
-	if needs.ImageFile == "" {
-		t.Fatal("expected a mosaic ImageFile for the covered playlist")
+	byName := map[string]*Node{}
+	for _, c := range root.Children {
+		byName[c.Name] = c
 	}
-	if filepath.Dir(needs.ImageFile) != "art/mosaic" {
-		t.Errorf("mosaic path = %q, want under art/mosaic/", needs.ImageFile)
+	// Covered playlist → predictable slug-named mosaic that exists on disk.
+	if got := byName["needs"].Playlist.ImageFile; got != "art/mosaic/needs.jpg" {
+		t.Errorf("mosaic ImageFile = %q, want art/mosaic/needs.jpg", got)
 	}
-	if _, err := os.Stat(filepath.Join(out, filepath.FromSlash(needs.ImageFile))); err != nil {
+	if _, err := os.Stat(filepath.Join(out, "art", "mosaic", "needs.jpg")); err != nil {
 		t.Errorf("mosaic file not written: %v", err)
 	}
-	// Explicit hero untouched.
-	if explicit.ImageFile != "" {
-		t.Errorf("explicit-hero playlist must not get a mosaic: %q", explicit.ImageFile)
+	if byName["explicit"].Playlist.ImageFile != "" {
+		t.Errorf("explicit-hero playlist must not get a mosaic: %q", byName["explicit"].Playlist.ImageFile)
 	}
-	// No downloaded covers → untouched.
-	if bare.ImageFile != "" {
-		t.Errorf("cover-less playlist must not get a mosaic: %q", bare.ImageFile)
+	if byName["bare"].Playlist.ImageFile != "" {
+		t.Errorf("cover-less playlist must not get a mosaic: %q", byName["bare"].Playlist.ImageFile)
+	}
+}
+
+func TestGenerateMosaics_SkipsWhenFresh(t *testing.T) {
+	hub, out := t.TempDir(), t.TempDir()
+	writePNG(t, hub, "art/aa/a.jpg")
+	src := filepath.Join(hub, "m.yaml")
+	mustWrite(t, src, "title: M\ntracks:\n  - {title: '1', artist: A, image_file: art/aa/a.jpg}\n")
+	root, err := BuildTree(hub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := GenerateMosaics(hub, out, root); err != nil {
+		t.Fatal(err)
+	}
+	dst := filepath.Join(out, "art", "mosaic", "m.jpg")
+	// Sentinel + force src OLDER than the mosaic → fresh → must skip.
+	if err := os.WriteFile(dst, []byte("SENTINEL"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	past := time.Now().Add(-time.Hour)
+	if err := os.Chtimes(src, past, past); err != nil {
+		t.Fatal(err)
+	}
+	root2, _ := BuildTree(hub)
+	if err := GenerateMosaics(hub, out, root2); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(dst); string(got) != "SENTINEL" {
+		t.Errorf("fresh mosaic should be skipped, but it was regenerated (%d bytes)", len(got))
+	}
+}
+
+func TestGenerateMosaics_RegeneratesWhenStale(t *testing.T) {
+	hub, out := t.TempDir(), t.TempDir()
+	writePNG(t, hub, "art/aa/a.jpg")
+	src := filepath.Join(hub, "m.yaml")
+	mustWrite(t, src, "title: M\ntracks:\n  - {title: '1', artist: A, image_file: art/aa/a.jpg}\n")
+	root, err := BuildTree(hub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := GenerateMosaics(hub, out, root); err != nil {
+		t.Fatal(err)
+	}
+	dst := filepath.Join(out, "art", "mosaic", "m.jpg")
+	if err := os.WriteFile(dst, []byte("SENTINEL"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Force src NEWER than the mosaic → stale → must regenerate.
+	future := time.Now().Add(time.Hour)
+	if err := os.Chtimes(src, future, future); err != nil {
+		t.Fatal(err)
+	}
+	root2, _ := BuildTree(hub)
+	if err := GenerateMosaics(hub, out, root2); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(dst); string(got) == "SENTINEL" {
+		t.Error("stale mosaic (source YAML newer) should be regenerated")
 	}
 }
