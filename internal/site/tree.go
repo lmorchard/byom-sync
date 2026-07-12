@@ -21,7 +21,7 @@ type Node struct {
 	Title    string
 	Path     string
 	IsDir    bool
-	IntroMD  string // raw markdown from index.md (root) or README.md (subdirs)
+	IntroMD  string // raw markdown from the folder's README.md (root and subdirs)
 	Playlist *playlist.Playlist
 	Children []*Node
 }
@@ -34,11 +34,8 @@ func BuildTree(hubDir string) (*Node, error) {
 func buildDir(fsDir, urlPath, name string) (*Node, error) {
 	node := &Node{Name: name, Title: name, Path: urlPath, IsDir: true}
 
-	introName := "README.md"
-	if urlPath == "" {
-		introName = "index.md"
-	}
-	if data, err := os.ReadFile(filepath.Join(fsDir, introName)); err == nil {
+	// Every folder, root included, sources its intro prose from README.md.
+	if data, err := os.ReadFile(filepath.Join(fsDir, "README.md")); err == nil {
 		node.IntroMD = string(data)
 	}
 

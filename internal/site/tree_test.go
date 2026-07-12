@@ -10,7 +10,7 @@ import (
 func writeFixtureHub(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	mustWrite(t, filepath.Join(dir, "index.md"), "# mixtapes\n\nWelcome.\n")
+	mustWrite(t, filepath.Join(dir, "README.md"), "# mixtapes\n\nWelcome.\n")
 	mustWrite(t, filepath.Join(dir, "2014-top-songs.yaml"),
 		"spotify_id: abc\ntitle: 2014 Top Songs\ncreator: les\ntracks:\n  - {title: T1, artist: A1, image: 'http://img/1.jpg'}\n")
 	sp := filepath.Join(dir, "synthpop")
@@ -64,7 +64,7 @@ func TestBuildTree(t *testing.T) {
 		t.Fatalf("root: IsDir=%v Path=%q", root.IsDir, root.Path)
 	}
 	if root.IntroMD == "" {
-		t.Error("root IntroMD should come from index.md")
+		t.Error("root IntroMD should come from README.md")
 	}
 	// Directories sort before playlists.
 	if len(root.Children) != 2 {
