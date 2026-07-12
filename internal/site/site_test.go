@@ -5,6 +5,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/sirupsen/logrus"
+	logtest "github.com/sirupsen/logrus/hooks/test"
 )
 
 func TestBuildEndToEnd(t *testing.T) {
@@ -49,6 +52,38 @@ func TestBuildEndToEnd(t *testing.T) {
 	}
 	if !strings.Contains(string(pl), `href="/pages/about/"`) {
 		t.Error("playlist page header should link the content page")
+	}
+}
+
+func TestBuildNarratesPhases(t *testing.T) {
+	logger, hook := logtest.NewNullLogger()
+	logger.SetLevel(logrus.InfoLevel)
+	err := Build(Options{
+		HubDir:   writeFixtureHub(t),
+		OutDir:   t.TempDir(),
+		PagesDir: t.TempDir(),
+		Site:     testSite(),
+		Logger:   logger,
+	})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	var msgs []string
+	hasElapsed := false
+	for _, e := range hook.AllEntries() {
+		msgs = append(msgs, e.Message)
+		if _, ok := e.Data["elapsed"]; ok {
+			hasElapsed = true
+		}
+	}
+	joined := strings.Join(msgs, "\n")
+	for _, want := range []string{"walk hub", "generate mosaics", "copy art", "write feed", "build complete"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("narration missing %q; got:\n%s", want, joined)
+		}
+	}
+	if !hasElapsed {
+		t.Error("expected phase entries to carry an 'elapsed' field")
 	}
 }
 
