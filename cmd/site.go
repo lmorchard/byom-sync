@@ -52,6 +52,7 @@ func runSite(_ *cobra.Command, _ []string) error {
 		HubDir:   hub,
 		OutDir:   out,
 		PagesDir: pagesDir,
+		Logger:   log,
 		Site: site.SiteMeta{
 			Title:                 viper.GetString("site.title"),
 			BaseURL:               baseURL,
