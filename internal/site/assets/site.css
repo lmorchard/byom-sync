@@ -29,6 +29,10 @@ body.playlist, body.folder { max-width:64rem; height:100dvh; display:flex; flex-
    height. */
 body.playlist .layout > main { display:flex; flex-direction:column; }
 body.playlist byom-player { flex:1 1 auto; min-height:0; }
+/* Relocated header/crumb chrome inside the sidebar — shown only inside the
+   mobile hamburger overlay (see the media query); hidden on desktop, where the
+   header page-nav and in-main crumbs are visible in their normal spots. */
+.sidebar-chrome { display:none; }
 byom-site-nav { display:block; }
 .site-nav ul { list-style:none; margin:0; padding:0; font-size:.85rem; }
 .site-nav ul ul { padding-left:.9rem; }
@@ -71,6 +75,16 @@ byom-site-nav { display:block; }
     padding:1rem 1.5rem 2rem; overflow-y:auto;
     background:var(--bg); border-top:1px solid #333;
   }
+
+  /* Playlist pages: give the app-shell player maximum room. Drop the footer and
+     move the page-nav + breadcrumbs off the header/main and into the hamburger
+     overlay (their relocated copies in .sidebar-chrome). */
+  body.playlist .site-footer { display:none; }
+  body.playlist .site-header .page-nav { display:none; }
+  body.playlist .layout > main > .crumbs { display:none; }
+  body.playlist .sidebar-chrome { display:block; margin-bottom:1.25rem; }
+  body.playlist .sidebar-chrome .page-nav { gap:1.25rem; margin-bottom:.6rem; }
+  body.playlist .sidebar-chrome .crumbs { margin:0; }
 }
 
 /* Embed page: a fixed-height column so the player fills the iframe as an app
