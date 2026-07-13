@@ -85,6 +85,9 @@ byom-site-nav { display:block; }
   body.playlist .sidebar-chrome { display:block; margin-bottom:1.25rem; }
   body.playlist .sidebar-chrome .page-nav { gap:1.25rem; margin-bottom:.6rem; }
   body.playlist .sidebar-chrome .crumbs { margin:0; }
+  /* Tighten the top gap above the title and add breathing room below it. */
+  body.playlist { padding-top:0.6rem; }
+  body.playlist .site-header { margin-bottom:1rem; }
 }
 
 /* Embed page: a fixed-height column so the player fills the iframe as an app
