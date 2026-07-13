@@ -7,6 +7,10 @@
 <label for="nav-toggle" class="nav-toggle-btn" aria-label="Toggle site navigation"></label>
 <div class="layout">
 <aside class="sidebar">
+<div class="sidebar-chrome">
+{{template "pagenav" .}}
+{{template "crumbs" .}}
+</div>
 <byom-site-nav></byom-site-nav>
 <script type="module" src="/assets/site-nav.js"></script>
 </aside>

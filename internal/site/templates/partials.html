@@ -1,7 +1,9 @@
+{{define "pagenav"}}{{if .Site.Pages}}<nav class="page-nav">{{range .Site.Pages}}<a href="{{.Href}}">{{.Title}}</a>{{end}}</nav>{{end}}{{end}}
+
 {{define "siteheader"}}
 <header class="site-header">
 <a class="site-title" href="/">{{.Site.Title}}</a>
-{{if .Site.Pages}}<nav class="page-nav">{{range .Site.Pages}}<a href="{{.Href}}">{{.Title}}</a>{{end}}</nav>{{end}}
+{{template "pagenav" .}}
 </header>
 {{end}}
 
