@@ -23,6 +23,12 @@ body.playlist, body.folder { max-width:64rem; height:100dvh; display:flex; flex-
 .layout { flex:1; min-height:0; display:grid; grid-template-columns:21.3rem minmax(0,1fr); gap:2.5rem; }
 .sidebar { min-height:0; overflow-y:auto; padding-right:1rem; }
 .layout > main { min-height:0; overflow-y:auto; }
+/* Playlist page: give <byom-player> a bounded height so it runs as an app shell
+   (header/transport/filter fixed, tracklist is the single scroll region). The
+   player owns its internal fit/responsive layout; the shell only supplies the
+   height. */
+body.playlist .layout > main { display:flex; flex-direction:column; }
+body.playlist byom-player { flex:1 1 auto; min-height:0; }
 byom-site-nav { display:block; }
 .site-nav ul { list-style:none; margin:0; padding:0; font-size:.85rem; }
 .site-nav ul ul { padding-left:.9rem; }
@@ -37,9 +43,12 @@ byom-site-nav { display:block; }
 .nav-toggle, .nav-toggle-btn { display:none; }
 
 @media (max-width:48rem) {
-  body.playlist, body.folder { height:auto; display:block; overflow:visible; }
+  /* Folder index pages scroll as a normal page. Playlist pages stay a fixed
+     app-shell (100dvh from the base rule): the player fills the viewport and its
+     tracklist is the scroll region — no page scroll, no nested scroll. */
+  body.folder { height:auto; display:block; overflow:visible; }
   .layout { grid-template-columns:minmax(0,1fr); }
-  .layout > main { overflow:visible; }
+  body.folder .layout > main { overflow:visible; }
 
   /* Mobile nav is a checkbox-hack hamburger (no JS): the ☰ button is fixed
      top-right, and the sidebar hides so the player is what you see first.
@@ -64,8 +73,11 @@ byom-site-nav { display:block; }
   }
 }
 
-body.embed { padding:.5rem; }
-.embed-attribution { display:block; font-size:.75rem; color:var(--muted); margin-top:.4rem; }
+/* Embed page: a fixed-height column so the player fills the iframe as an app
+   shell, with the attribution pinned beneath. */
+body.embed { padding:.5rem; max-width:none; height:100dvh; display:flex; flex-direction:column; }
+body.embed byom-player { flex:1 1 auto; min-height:0; }
+.embed-attribution { display:block; flex:none; font-size:.75rem; color:var(--muted); margin-top:.4rem; }
 
 .playlist-cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(18rem,1fr)); gap:1rem; margin:.4rem 0 0; }
 .playlist-card { display:flex; gap:.75rem; align-items:flex-start; padding:.55rem; border-radius:8px; text-decoration:none; color:var(--fg); background:#1c1c1c; }
