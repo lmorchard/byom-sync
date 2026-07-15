@@ -219,7 +219,7 @@ site:
   providers: [youtube, spotify]            # optional: offered in the player's picker
   # youtube_search_endpoint: https://...   # host attributes baked into each page
   # spotify_client_id: "..."
-  # player_src: https://cdn.jsdelivr.net/npm/@lmorchard/byom-player@1.0.0/dist/byom-player.js
+  # player_src: https://cdn.jsdelivr.net/npm/@lmorchard/byom-player@1.0.2/dist/byom-player.js
 ```
 
 The output is a static tree ready for any static host: a landing page, one page
