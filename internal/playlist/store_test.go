@@ -3,6 +3,8 @@ package playlist
 import (
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
@@ -258,6 +260,46 @@ func TestHubPaths_EmptyDirIsNotAnError(t *testing.T) {
 func TestHubPaths_MissingInputErrors(t *testing.T) {
 	if _, err := HubPaths(filepath.Join(t.TempDir(), "nope")); err == nil {
 		t.Error("expected an error for a missing input path")
+	}
+}
+
+// A symlinked hub root (a NAS mount or cloud-synced folder, say) must be
+// walked like a real directory, not silently treated as an empty leaf.
+func TestHubPaths_FollowsSymlinkedRoot(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlinks need elevated privileges on windows")
+	}
+
+	base := t.TempDir()
+	real := filepath.Join(base, "real")
+	mkfile(t, filepath.Join(real, "root.yaml"))
+	mkfile(t, filepath.Join(real, "sub", "nested.yaml"))
+
+	link := filepath.Join(base, "link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := HubPaths(link)
+	if err != nil {
+		t.Fatalf("HubPaths: %v", err)
+	}
+
+	want := []string{
+		filepath.Join(link, "root.yaml"),
+		filepath.Join(link, "sub", "nested.yaml"),
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %d paths, want %d:\ngot:  %v\nwant: %v", len(got), len(want), got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("path %d: got %q want %q", i, got[i], want[i])
+		}
+		// The symlink path is the caller's prefix — never the resolved target.
+		if !strings.HasPrefix(got[i], link) {
+			t.Errorf("path %d: %q does not carry the symlink prefix %q", i, got[i], link)
+		}
 	}
 }
 

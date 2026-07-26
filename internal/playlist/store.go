@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -43,6 +44,17 @@ func Slug(title string) string {
 //     content. Only the store at the hub root is special; a nested directory
 //     that happens to be named "art" is walked normally.
 //
+// The walk goes through os.DirFS(root) rather than filepath.WalkDir(root, ...)
+// so that a root which is itself a symlink to a directory (a NAS mount or a
+// cloud-synced folder, say) is walked like a real directory: DirFS's ReadDir
+// follows the root, where filepath.WalkDir's initial Lstat would see the
+// symlink and report a non-directory, silently returning no paths at all —
+// exactly the empty-hub failure mode this function exists to prevent.
+// Symlinks *below* the root are left alone, as before. fs.WalkDir yields
+// slash-separated paths relative to root, which are rejoined onto the
+// caller's own input so results keep its prefix verbatim (callers such as
+// export.Run compute filepath.Rel(input, path) against these).
+//
 // Results are sorted so runs are deterministic regardless of directory order.
 func HubPaths(input string) ([]string, error) {
 	info, err := os.Stat(input)
@@ -58,11 +70,11 @@ func HubPaths(input string) ([]string, error) {
 	root := filepath.Clean(input)
 
 	var paths []string
-	walkErr := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+	walkErr := fs.WalkDir(os.DirFS(root), ".", func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if p == root {
+		if p == "." {
 			return nil // never skip the root on its own name
 		}
 		if strings.HasPrefix(d.Name(), ".") {
@@ -72,13 +84,13 @@ func HubPaths(input string) ([]string, error) {
 			return nil
 		}
 		if d.IsDir() {
-			if d.Name() == "art" && filepath.Dir(p) == root {
+			if d.Name() == "art" && path.Dir(p) == "." {
 				return fs.SkipDir
 			}
 			return nil
 		}
 		if strings.HasSuffix(d.Name(), ".yaml") {
-			paths = append(paths, p)
+			paths = append(paths, filepath.Join(root, filepath.FromSlash(p)))
 		}
 		return nil
 	})
