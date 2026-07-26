@@ -163,7 +163,7 @@ func TestRunResolveAll_FansOutFlagsAndGatesDelay(t *testing.T) {
 	origResolveNoCache, origArtNoCache, origEnrichNoCache := resolveNoCache, artNoCache, enrichNoCache
 	origArtDownload := artDownload
 	origAllSkipSpotify, origAllSkipArt, origAllSkipYouTube := allSkipSpotify, allSkipArt, allSkipYouTube
-	origAllInput, origAllNoCache, origAllDelay := allInput, allNoCache, allDelay
+	origAllInput, origAllNoCache, origAllDelay, origAllLimit := allInput, allNoCache, allDelay, allLimit
 	t.Cleanup(func() {
 		resolveDelay, artDelay, enrichDelay = origResolveDelay, origArtDelay, origEnrichDelay
 		resolveInput, artInput, enrichInput = origResolveInput, origArtInput, origEnrichInput
@@ -171,14 +171,14 @@ func TestRunResolveAll_FansOutFlagsAndGatesDelay(t *testing.T) {
 		resolveNoCache, artNoCache, enrichNoCache = origResolveNoCache, origArtNoCache, origEnrichNoCache
 		artDownload = origArtDownload
 		allSkipSpotify, allSkipArt, allSkipYouTube = origAllSkipSpotify, origAllSkipArt, origAllSkipYouTube
-		allInput, allNoCache, allDelay = origAllInput, origAllNoCache, origAllDelay
+		allInput, allNoCache, allDelay, allLimit = origAllInput, origAllNoCache, origAllDelay, origAllLimit
 
 		// t.Cleanup can restore the Go variables above, but not pflag's own
 		// per-flag Changed bool. Without resetting it here, this test's
 		// Parse("--delay=3s") call leaves resolveAllCmd's "delay" flag marked
 		// Changed for the rest of the test binary's life, so a later test
 		// calling runResolveAll would silently inherit it.
-		for _, name := range []string{"delay", "skip-spotify", "skip-art", "skip-youtube"} {
+		for _, name := range []string{"delay", "limit", "skip-spotify", "skip-art", "skip-youtube"} {
 			resolveAllCmd.Flags().Lookup(name).Changed = false
 		}
 	})
@@ -186,8 +186,9 @@ func TestRunResolveAll_FansOutFlagsAndGatesDelay(t *testing.T) {
 	// Skip every stage so runResolveAll returns "every stage skipped" without
 	// touching the network or requiring credentials — but the fan-out and the
 	// prereq check both run before that early return, so this still exercises
-	// them.
-	if err := resolveAllCmd.Flags().Parse([]string{"--skip-spotify", "--skip-art", "--skip-youtube"}); err != nil {
+	// them. --limit=7 is a value distinguishing from every *Limit var's zero
+	// default, so the fan-out assertion below can't pass vacuously.
+	if err := resolveAllCmd.Flags().Parse([]string{"--skip-spotify", "--skip-art", "--skip-youtube", "--limit=7"}); err != nil {
 		t.Fatalf("parse flags: %v", err)
 	}
 	allInput = "/tmp/fake-hub-for-test"
@@ -205,6 +206,12 @@ func TestRunResolveAll_FansOutFlagsAndGatesDelay(t *testing.T) {
 	if !resolveNoCache || !artNoCache || !enrichNoCache {
 		t.Errorf("no-cache fan-out: resolveNoCache=%v artNoCache=%v enrichNoCache=%v, want all true",
 			resolveNoCache, artNoCache, enrichNoCache)
+	}
+	// allLimit is 7 here (via --limit=7 above), not the *Limit vars' shared
+	// zero default, so this actually exercises the fan-out instead of
+	// comparing two variables that would already be equal without it.
+	if allLimit != 7 {
+		t.Fatalf("test setup: allLimit = %d, want 7 (the --limit=7 just parsed)", allLimit)
 	}
 	if resolveLimit != allLimit || artLimit != allLimit || enrichLimit != allLimit {
 		t.Errorf("limit fan-out: resolveLimit=%d artLimit=%d enrichLimit=%d, want all %d",
