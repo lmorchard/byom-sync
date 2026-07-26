@@ -23,10 +23,11 @@ YouTube resolution cache in `internal/rcache/` — an index, not a source of tru
 ## Layout
 
 - `cmd/` — Cobra commands: `root`, `version`, `init`, `auth`, `sync`, `import`,
-  `export`, `resolve` (subcommands `youtube`, `spotify`, `art`, `prime`, `cache stats`,
-  `cache clear`), `site`, `dates`.
+  `export`, `resolve` (subcommands `all`, `youtube`, `spotify`, `art`, `prime`,
+  `cache stats`, `cache clear`), `site`, `dates`.
 - `internal/playlist/` — the hub: `types.go` (`Playlist`/`Track`/`SyncState`,
-  `Track.Key()`), `store.go` (`Load`/`LoadFile`/`FindFileByID`/`Save`/`Slug`),
+  `Track.Key()`), `store.go` (`HubPaths` — the canonical recursive hub walk, plus
+  `Load`/`LoadFile`/`FindFileByID`/`Save`/`Slug`),
   `merge.go` (`Merge`, `Archive`/`Mirror`), `dates.go` (`RefreshDates`,
   `EnsureImportedDate`).
 - `internal/auth/` — `store.go` (token JSON cache, `ErrNoToken`), `auth.go`
@@ -157,6 +158,19 @@ errcheck findings CI caught).
   extension in JSPF (namespace `https://github.com/lmorchard/byom-sync`), and
   `date_updated` also appears as markdown `updated`. (byom-player does not yet
   read the playlist-level date extension.)
+- **Hub discovery is recursive and centralized.** `playlist.HubPaths(input)` is
+  the single definition of "which files are in the hub": it walks subdirectories
+  to any depth, skips dotfiles (including macOS `._*.yaml` sidecars), and skips
+  the hub-root `art/` store. `cmd.hubPaths`, `export.Run`, and `playlist.Load`
+  all delegate to it, and it matches `internal/site/tree.go`'s rules. Do not
+  reintroduce a `filepath.Glob(dir + "/*.yaml")` — that shallow glob silently
+  found zero playlists in a subdirectory-organized hub, which broke `resolve`
+  and `dates` for months without an error.
+- **`resolve all` drives the per-stage globals.** The stage functions
+  (`runResolveSpotify`/`runResolveArt`/`runResolveYouTube`) read package-level
+  flag vars, and `resolveNoCache` in particular is assigned by two of them. When
+  adding a stage flag, fan it out in `runResolveAll` too, or the pipeline and the
+  standalone command will disagree.
 
 ## CI / release
 

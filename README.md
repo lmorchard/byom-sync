@@ -101,6 +101,20 @@ byom-sync auth
 Opens your browser to Spotify's consent page, captures the redirect locally, and
 caches a token. Later commands refresh it automatically.
 
+On a headless or remote host, the normal flow can't complete: Spotify pins the
+redirect URI to `http://127.0.0.1:<port>/callback` and matches it literally, so
+over SSH the consent page redirects *your laptop's* browser to *your laptop's*
+port and the code never reaches the machine running the command. Two ways
+around it:
+
+```sh
+# Relay the code by hand — no callback server, works from any shell
+byom-sync auth --manual
+
+# Or forward the port before connecting, then use the normal flow
+ssh -L 8888:127.0.0.1:8888 myhost
+```
+
 ### Sync
 
 ```sh
@@ -144,12 +158,34 @@ byom-sync export jspf --input ./playlists --out ./jspf
 byom-sync export markdown --input ./playlists --out ./content/playlists
 ```
 
-`--input` may be a single YAML file or a directory. When it's a directory,
-`--out` is treated as an output directory and each playlist is written as
-`<name>.<ext>`.
+`--input` may be a single YAML file or a directory. When it's a directory, the
+hub is walked recursively and `--out` mirrors its structure — so
+`playlists/01-covers/numan-s-shadow.yaml` exports to
+`<out>/01-covers/numan-s-shadow.<ext>`. Mirroring rather than flattening means
+two playlists sharing a basename in different folders can't overwrite each other.
 
 M3U8 track paths are built as `{lib-prefix}/{Artist}/{Album}/{Title}.{ext}` and
 emitted as-is; the files aren't checked against the filesystem.
+
+### Enrich everything at once
+
+```sh
+# Full pipeline over one playlist: spotify -> art -> youtube
+byom-sync resolve all --input playlists/00-conceptual/my-mixtape.yaml
+
+# Skip a stage (also skips its prerequisite check)
+byom-sync resolve all --skip-youtube
+```
+
+`resolve all` runs the three enrichment stages in dependency order — the Spotify
+stage writes the ISRCs that the art and YouTube stages use as their cache
+identity. Prerequisites for every enabled stage (a cached Spotify token, `yt-dlp`
+on `PATH`) are checked *before* any stage runs, so a missing tool is reported
+immediately rather than after a long art crawl.
+
+`--download` defaults to true here, unlike `resolve art`. A missing Spotify token
+is fatal here rather than degrading to MusicBrainz-only art; run `resolve art`
+on its own if you want the degrading behavior.
 
 ### Resolve YouTube IDs
 
@@ -258,6 +294,10 @@ tracks:
 Tracks are matched across syncs by ISRC, falling back to a normalized
 artist + title. Files are matched to remote playlists by `spotify_id`, so a file
 can be renamed freely.
+
+Playlists may be filed in subdirectories to any depth — `resolve`, `dates`,
+`export`, and `site` all walk the hub recursively. Dotfiles and the hub-root
+`art/` store are skipped.
 
 Spotify's API doesn't expose a true playlist creation date, so `date_created`
 records when `byom-sync` first synced the playlist. The per-track `added_at`
