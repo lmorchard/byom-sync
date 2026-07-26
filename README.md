@@ -299,6 +299,11 @@ Playlists may be filed in subdirectories to any depth — `resolve`, `dates`,
 `export`, and `site` all walk the hub recursively. Dotfiles and the hub-root
 `art/` store are skipped.
 
+`sync`, however, still matches and writes files at the hub root only: it
+doesn't search subdirectories for an existing file to update. If you've moved
+a playlist into a subdirectory, `sync` won't find it there and will write a
+duplicate at the hub root instead.
+
 Spotify's API doesn't expose a true playlist creation date, so `date_created`
 records when `byom-sync` first synced the playlist. The per-track `added_at`
 values carry the real curation history.
