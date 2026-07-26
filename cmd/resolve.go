@@ -49,6 +49,17 @@ var (
 	enrichCanonicalize bool
 )
 
+var (
+	allInput       string
+	allLimit       int
+	allDelay       time.Duration
+	allNoCache     bool
+	allDownload    bool
+	allSkipSpotify bool
+	allSkipArt     bool
+	allSkipYouTube bool
+)
+
 // defaultCachePath mirrors the auth config-dir logic: $XDG_CONFIG_HOME/byom-sync
 // (or ~/.config/byom-sync), file cache.db.
 func defaultCachePath() string {
@@ -835,6 +846,141 @@ func checkPrereqs(reqs []prereq) error {
 	return fmt.Errorf("missing prerequisites:\n%s", strings.Join(missing, "\n"))
 }
 
+// stage is one step of the resolve-all pipeline, named for logging and for the
+// prerequisite mapping.
+type stage struct {
+	name string
+	run  func(context.Context) error
+}
+
+// resolveAllStages returns the enabled stages in dependency order. The order is
+// a data dependency, not a preference: `resolve spotify` writes the ISRCs that
+// the art and youtube stages use as their cache identity (Track.Key()).
+func resolveAllStages(skipSpotify, skipArt, skipYouTube bool) []stage {
+	stages := make([]stage, 0, 3)
+	if !skipSpotify {
+		stages = append(stages, stage{name: "spotify", run: runResolveSpotify})
+	}
+	if !skipArt {
+		stages = append(stages, stage{name: "art", run: runResolveArt})
+	}
+	if !skipYouTube {
+		stages = append(stages, stage{name: "youtube", run: runResolveYouTube})
+	}
+	return stages
+}
+
+// resolveAllPrereqs returns the external requirements of the enabled stages,
+// deduplicated (spotify and art both need the same token).
+func resolveAllPrereqs(stages []stage) []prereq {
+	var needToken, needYtdlp bool
+	for _, s := range stages {
+		switch s.name {
+		case "spotify", "art":
+			needToken = true
+		case "youtube":
+			needYtdlp = true
+		}
+	}
+
+	reqs := make([]prereq, 0, 2)
+	if needToken {
+		reqs = append(reqs, prereq{
+			name:   "Spotify token",
+			check:  func() error { _, err := auth.LoadToken(); return err },
+			remedy: "run `byom-sync auth` (or `byom-sync auth --manual` on a headless host)",
+		})
+	}
+	if needYtdlp {
+		bin := viper.GetString("ytdlp_path")
+		if bin == "" {
+			bin = "yt-dlp"
+		}
+		reqs = append(reqs, prereq{
+			name:   "yt-dlp",
+			check:  func() error { _, err := exec.LookPath(bin); return err },
+			remedy: "install yt-dlp (https://github.com/yt-dlp/yt-dlp) or set ytdlp_path",
+		})
+	}
+	return reqs
+}
+
+var resolveAllCmd = &cobra.Command{
+	Use:   "all",
+	Short: "Run the full enrichment pipeline: spotify, then art, then youtube",
+	Long: `Run every enrichment stage over the hub in dependency order:
+
+  1. resolve spotify  — isrc, spotify_id, spotify_url, duration_ms, album, image
+  2. resolve art      — cover art, downloaded into <hub>/art by default
+  3. resolve youtube  — a playable youtube_id per track
+
+The order matters: the spotify stage writes the ISRCs that the art and youtube
+stages use as their cache identity, so running them in this sequence reuses work
+instead of repeating it.
+
+Prerequisites for every enabled stage are checked before any work starts, so a
+missing yt-dlp is reported immediately rather than after a long art crawl. Use
+--skip-youtube on a host without yt-dlp (its prerequisite is then not checked).
+
+Unlike the individual commands, a missing Spotify token is fatal here rather
+than degrading to MusicBrainz-only art: running the full pipeline implies you
+want the Spotify data. Run 'resolve art' on its own for the degrading behavior.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runResolveAll(context.Background(), cmd)
+	},
+}
+
+func runResolveAll(ctx context.Context, cmd *cobra.Command) error {
+	input := allInput
+	if input == "" {
+		input = viper.GetString("dir")
+	}
+
+	// Fan this command's flags out to the per-stage globals the run functions
+	// read. resolveNoCache is shared state that both runResolveArt and
+	// runResolveSpotify assign to (see their openCache calls), so driving all
+	// three cache flags from one value keeps the stages consistent instead of
+	// letting whichever ran last decide for the youtube stage.
+	resolveInput, artInput, enrichInput = input, input, input
+	resolveLimit, artLimit, enrichLimit = allLimit, allLimit, allLimit
+	resolveNoCache, artNoCache, enrichNoCache = allNoCache, allNoCache, allNoCache
+	artDownload = allDownload
+
+	// Each stage has a different sensible pace (youtube 500ms, spotify 200ms,
+	// art 1100ms for MusicBrainz's ~1 req/sec policy), so only override them
+	// when the user actually passed --delay.
+	if cmd.Flags().Changed("delay") {
+		resolveDelay, artDelay, enrichDelay = allDelay, allDelay, allDelay
+	}
+
+	stages := resolveAllStages(allSkipSpotify, allSkipArt, allSkipYouTube)
+	if len(stages) == 0 {
+		return fmt.Errorf("every stage skipped — nothing to do")
+	}
+	if err := checkPrereqs(resolveAllPrereqs(stages)); err != nil {
+		return err
+	}
+	if err := runStages(ctx, stages); err != nil {
+		return err
+	}
+	log.Infof("resolve all: %d stage(s) complete over %s", len(stages), input)
+	return nil
+}
+
+// runStages executes stages in order, aborting on the first failure — the later
+// stages consume data the failed one was supposed to write, so continuing would
+// just produce confusing downstream errors. Split out from runResolveAll so the
+// sequencing is testable with fake stages, without network or credentials.
+func runStages(ctx context.Context, stages []stage) error {
+	for i, s := range stages {
+		log.Infof("resolve all [%d/%d] %s: starting", i+1, len(stages), s.name)
+		if err := s.run(ctx); err != nil {
+			return fmt.Errorf("%s stage: %w", s.name, err)
+		}
+	}
+	return nil
+}
+
 func init() {
 	rootCmd.AddCommand(resolveCmd)
 	resolveCmd.AddCommand(resolveYouTubeCmd)
@@ -863,6 +1009,16 @@ func init() {
 	resolveCmd.AddCommand(resolvePrimeCmd)
 	resolvePrimeCmd.Flags().StringVar(&primeInput, "input", "", "hub YAML file or directory (default: config dir)")
 	resolvePrimeCmd.Flags().BoolVar(&primeAssumeEmbeddable, "assume-embeddable", true, "mark seeded ids as embeddable (skip re-verify within the embed TTL)")
+
+	resolveCmd.AddCommand(resolveAllCmd)
+	resolveAllCmd.Flags().StringVar(&allInput, "input", "", "hub YAML file or directory (default: config dir)")
+	resolveAllCmd.Flags().IntVar(&allLimit, "limit", 0, "max tracks attempted per stage (0 = unlimited)")
+	resolveAllCmd.Flags().DurationVar(&allDelay, "delay", 0, "override every stage's request pacing (default: each stage's own)")
+	resolveAllCmd.Flags().BoolVar(&allNoCache, "no-cache", false, "bypass the resolution caches for every stage")
+	resolveAllCmd.Flags().BoolVar(&allDownload, "download", true, "download cover art into <hub>/art and record image_file")
+	resolveAllCmd.Flags().BoolVar(&allSkipSpotify, "skip-spotify", false, "skip the Spotify enrichment stage")
+	resolveAllCmd.Flags().BoolVar(&allSkipArt, "skip-art", false, "skip the cover-art stage")
+	resolveAllCmd.Flags().BoolVar(&allSkipYouTube, "skip-youtube", false, "skip the YouTube resolution stage")
 
 	resolveCmd.AddCommand(resolveCacheCmd)
 	resolveCacheCmd.AddCommand(resolveCacheStatsCmd)
