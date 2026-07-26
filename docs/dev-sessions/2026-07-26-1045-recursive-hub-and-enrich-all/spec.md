@@ -1,4 +1,4 @@
-# Spec — Recursive hub discovery, one-shot enrichment, headless auth
+# Spec — Recursive hub discovery, recursive export, one-shot enrichment, headless auth
 
 **Date:** 2026-07-26
 **Branch:** `feat/recursive-hub-and-enrich-all`
@@ -6,18 +6,21 @@
 
 ## Summary
 
-Three related fixes, driven by real breakage found while hand-authoring a
+Four related fixes, driven by real breakage found while hand-authoring a
 playlist for `mixtapes.lmorchard.com`:
 
 1. **Recursive hub discovery** — `hubPaths()` only globs one directory level, so
-   `resolve {youtube,spotify,art}` and `dates` silently do nothing on a hub whose
-   playlists live in subdirectories. This is a live regression.
-2. **`resolve all`** — collapse the three-command enrichment pipeline into one
+   `resolve {youtube,spotify,art}`, `prime`, and `dates` silently do nothing on a
+   hub whose playlists live in subdirectories. This is a live regression.
+2. **Recursive `export`** — the same shallow-glob bug in a second code path,
+   fixed by mirroring the hub tree into the output directory.
+3. **`resolve all`** — collapse the three-command enrichment pipeline into one
    invocation with up-front prerequisite checks.
-3. **`auth --manual`** — make authentication possible on a headless/remote host.
+4. **`auth --manual`** — make authentication possible on a headless/remote host.
 
-They ship together because (2) is only usable once (1) works, and (3) is what
-makes (2) runnable on the deployment box.
+They ship together because (3) is only usable once (1) works, (4) is what makes
+(3) runnable on the deployment box, and (1) and (2) are the same bug in two
+places — fixed once, in one shared helper.
 
 ## Guiding decisions (from brainstorming)
 
@@ -31,8 +34,9 @@ makes (2) runnable on the deployment box.
   target is a convenience alias, not the source of truth.
 - **No new traversal semantics.** Reuse the skip rules `internal/site/tree.go`
   already established (dotfiles, top-level `art/`).
-- **YAGNI on `export`.** It has the same shallow-glob bug but a different
-  failure mode; it is explicitly out of scope (see Non-goals).
+- **Output mirrors input.** Recursive `export` reproduces the hub's directory
+  structure rather than flattening it, making basename collisions structurally
+  impossible instead of merely detected.
 
 ---
 
@@ -60,14 +64,34 @@ commands had worked when the YAML sat at the top level.
 
 ### Blast radius
 
-`hubPaths()` is the single discovery point for five commands — `cmd/dates.go:34`
-and `cmd/resolve.go:112,334,527,682` (`youtube`, `spotify`, `art`, `prime`). One
-fix repairs all five.
+`hubPaths()` is the discovery point for five commands — `cmd/dates.go:34` and
+`cmd/resolve.go:112,334,527,682` (`youtube`, `spotify`, `art`, and `prime`, whose
+call sits inside its `RunE` closure). One fix repairs all five.
+
+`internal/export/export.go:36` has the *same* glob in a second package
+(Part 2), and `internal/playlist/Load()` has it a third time. Rather than fix
+the same bug three times, the walk becomes one exported helper.
 
 ### The change
 
-Replace the glob with a `filepath.WalkDir` that mirrors the site generator's
-rules (`internal/site/tree.go:44-56`):
+Add the canonical walker to `internal/playlist/store.go`, next to `LoadFile`:
+
+```go
+// HubPaths returns every playlist YAML under input, recursively.
+func HubPaths(input string) ([]string, error)
+```
+
+`cmd.hubPaths()` becomes a thin delegation to it, and `export.Run()` (Part 2)
+uses the same function — so "what counts as the hub" has exactly one definition,
+shared by the resolvers, the exporters, and (via the same skip rules) the site
+generator.
+
+`playlist.Load(dir)` also delegates, making it recursive for consistency. It is
+currently referenced only by `internal/playlist/store_test.go:45` and by no
+production code, so this is a no-risk alignment rather than a behavior change
+anyone can observe.
+
+The walk mirrors the site generator's rules (`internal/site/tree.go:44-56`):
 
 - Collect every `*.yaml` at any depth.
 - Skip entries whose name begins with `.` — editor/VCS cruft and macOS
@@ -84,7 +108,8 @@ files become visible — which is the bug being fixed.
 
 ### Testing
 
-Table-driven tests in `cmd/`, using `t.TempDir()`:
+Table-driven tests in `internal/playlist/`, using `t.TempDir()`, plus a thin
+`cmd/` test confirming `hubPaths` delegates:
 
 | Case | Expectation |
 |---|---|
@@ -100,7 +125,58 @@ Table-driven tests in `cmd/`, using `t.TempDir()`:
 
 ---
 
-## Part 2 — `byom-sync resolve all`
+## Part 2 — Recursive `export` with a mirrored tree
+
+### The bug
+
+`internal/export/export.go:36` globs `<input>/*.yaml`, so
+`export m3u8 --input ./playlists` on a nested hub writes nothing — the same
+silent no-op as Part 1, in a path Part 1's fix doesn't reach.
+
+### The change
+
+`export.Run()` switches to `playlist.HubPaths()` and reproduces the hub's
+structure under `--out`:
+
+```
+playlists/00-conceptual/drones.yaml   →   out/00-conceptual/drones.m3u8
+playlists/01-covers/numan-s-shadow.yaml → out/01-covers/numan-s-shadow.m3u8
+```
+
+Mechanically: for each discovered path, take `filepath.Rel(input, path)`, swap
+the extension for the exporter's, join onto `out`, and `MkdirAll` the parent
+before writing. Basename collisions across folders become structurally
+impossible, so no collision detection is needed.
+
+Single-file `--input` is unchanged: `--out` remains the exact output path.
+
+A flat-output mode is deliberately omitted (YAGNI) — it can be added as
+`--flat` later if a media server actually needs it.
+
+### Art root is already correct
+
+`artRootOf()` (`cmd/export.go:52`) resolves `--input`'s directory as the root
+that hub-relative `image_file` values are joined against. Exporting the hub root
+recursively keeps that root correct, because `image_file` is stored
+hub-relative. No change needed.
+
+(Pre-existing, unchanged by this work: exporting a *subdirectory* with
+`--embed-art` resolves `image_file` against that subdirectory and misses the
+store at the hub root. Out of scope here.)
+
+### Testing
+
+Extends the existing `TestRun_DirModeWritesFilePerInput` and
+`TestRun_FileModeSingleOutput` (`internal/export/export_test.go:388,413`):
+
+- Nested input produces a mirrored output tree.
+- Same basename in two folders yields two distinct files, neither overwritten.
+- Intermediate output directories are created.
+- Single-file mode still writes to the exact `--out` path.
+
+---
+
+## Part 3 — `byom-sync resolve all`
 
 ### Behavior
 
@@ -181,7 +257,7 @@ All via injected stage funcs and a faked prerequisite checker — no network.
 
 ---
 
-## Part 3 — `byom-sync auth --manual`
+## Part 4 — `byom-sync auth --manual`
 
 ### The problem
 
@@ -244,11 +320,10 @@ no-flag alternative.
 
 ## Non-goals
 
-- **`export.Run()` recursion.** `internal/export/export.go:36` has the identical
-  shallow-glob bug, but making it recursive flattens a tree into one `--out`
-  directory, so two same-named playlists in different folders would silently
-  overwrite each other. Fixing it needs a decision about mirroring the tree in
-  the output, which is a separate design.
+- **A `--flat` export mode.** Mirroring covers the known use cases; add it if a
+  media server turns out to need a single flat directory.
+- **Fixing `--embed-art` when exporting a subdirectory.** Pre-existing art-root
+  edge case, noted in Part 2, unchanged by this work.
 - **Changing `resolve art`'s degrade-without-token behavior.** Only `resolve all`
   treats a missing token as fatal.
 - **Parallelising stages.** They are ordered by data dependency, and both
@@ -271,3 +346,8 @@ no-flag alternative.
   existing `--limit` flag remains the throttle.
 - **Preflight is stricter than the individual commands.** Documented above; the
   per-stage commands still degrade as they always did.
+- **`export` output layout changes — but only where it currently produces
+  nothing.** A flat hub exports exactly as before (`Rel()` is just the basename,
+  so no subdirectories appear). A nested hub previously wrote zero files, so
+  there is no existing output anyone could be depending on. The one observable
+  difference is that `--out` may now contain directories.
