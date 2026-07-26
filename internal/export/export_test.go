@@ -588,3 +588,56 @@ func TestJSPFExportPlaylistDatesExtension(t *testing.T) {
 		t.Errorf("date_imported: got %q", ext[0].DateImported)
 	}
 }
+
+func TestRun_DirModeMirrorsHubTree(t *testing.T) {
+	inDir := t.TempDir()
+	outDir := t.TempDir()
+
+	// Same basename in two different folders: under the old flat behavior
+	// these would have collided and one would have silently won.
+	for _, rel := range []string{
+		filepath.Join("00-conceptual", "drones.yaml"),
+		filepath.Join("zz-not-mine", "drones.yaml"),
+		filepath.Join("01-covers", "numan-s-shadow.yaml"),
+	} {
+		path := filepath.Join(inDir, rel)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		p := samplePlaylist()
+		p.Title = rel
+		if err := os.WriteFile(path, mustYAML(t, p), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := Run(M3U8Exporter{}, "m3u8", inDir, outDir, map[string]string{"lib_prefix": "/m"}); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, rel := range []string{
+		filepath.Join("00-conceptual", "drones.m3u8"),
+		filepath.Join("zz-not-mine", "drones.m3u8"),
+		filepath.Join("01-covers", "numan-s-shadow.m3u8"),
+	} {
+		if _, err := os.Stat(filepath.Join(outDir, rel)); err != nil {
+			t.Errorf("expected mirrored output %s: %v", rel, err)
+		}
+	}
+}
+
+// A hub with no subdirectories must export exactly as it always has.
+func TestRun_DirModeFlatHubUnchanged(t *testing.T) {
+	inDir := t.TempDir()
+	outDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(inDir, "solo.yaml"), mustYAML(t, samplePlaylist()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Run(M3U8Exporter{}, "m3u8", inDir, outDir, map[string]string{"lib_prefix": "/m"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(outDir, "solo.m3u8")); err != nil {
+		t.Errorf("flat hub should produce out/solo.m3u8 with no subdirectory: %v", err)
+	}
+}
