@@ -1,7 +1,9 @@
 package playlist
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -26,17 +28,81 @@ func Slug(title string) string {
 	return s
 }
 
-// Load reads every *.yaml file in dir into a slice of playlists. A missing
-// directory yields an empty slice (not an error) — the first sync creates it.
+// HubPaths returns the path of every playlist YAML under input, recursively.
+// A non-directory input is returned unchanged as a single-element slice.
+//
+// The walk deliberately mirrors the site generator's view of the hub
+// (internal/site/tree.go), so the resolvers, the exporters, and the site build
+// never disagree about which files are playlists:
+//
+//   - Entries whose name begins with "." are skipped — editor/VCS cruft and
+//     macOS AppleDouble sidecars ("._foo.yaml"), which would otherwise be
+//     parsed as playlists and fail on their binary contents.
+//   - A top-level "art" directory is skipped: it is the content-addressed
+//     cover-art store written by `resolve art --download`, not playlist
+//     content. Only the store at the hub root is special; a nested directory
+//     that happens to be named "art" is walked normally.
+//
+// Results are sorted so runs are deterministic regardless of directory order.
+func HubPaths(input string) ([]string, error) {
+	info, err := os.Stat(input)
+	if err != nil {
+		return nil, fmt.Errorf("input %s: %w", input, err)
+	}
+	if !info.IsDir() {
+		return []string{input}, nil
+	}
+
+	// Clean once so the "is this the hub root?" comparisons below hold even
+	// when the caller passed a trailing slash.
+	root := filepath.Clean(input)
+
+	var paths []string
+	walkErr := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if p == root {
+			return nil // never skip the root on its own name
+		}
+		if strings.HasPrefix(d.Name(), ".") {
+			if d.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if d.IsDir() {
+			if d.Name() == "art" && filepath.Dir(p) == root {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if strings.HasSuffix(d.Name(), ".yaml") {
+			paths = append(paths, p)
+		}
+		return nil
+	})
+	if walkErr != nil {
+		return nil, walkErr
+	}
+	sort.Strings(paths)
+	return paths, nil
+}
+
+// Load reads every playlist YAML under dir, recursively, into a slice. A
+// missing directory yields an empty slice (not an error) — the first sync
+// creates it.
 func Load(dir string) ([]Playlist, error) {
-	matches, err := filepath.Glob(filepath.Join(dir, "*.yaml"))
+	paths, err := HubPaths(dir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}
-	sort.Strings(matches)
 
 	var playlists []Playlist
-	for _, path := range matches {
+	for _, path := range paths {
 		p, err := loadFile(path)
 		if err != nil {
 			return nil, fmt.Errorf("load %s: %w", path, err)
