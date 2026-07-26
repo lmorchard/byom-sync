@@ -106,3 +106,86 @@ func TestArtStoreRoot(t *testing.T) {
 		})
 	}
 }
+
+// TestArtStoreRoot_RelativeAbsoluteMismatch covers the case filepath.Rel
+// itself can't handle: one argument absolute, the other relative. That's the
+// realistic shape in practice — viper's "dir" default is the relative
+// "./playlists", while --input is commonly typed as an absolute path (or vice
+// versa). filepath.Rel errors on a mismatch, and naively falling back to the
+// pre-fix behavior on that error would silently reopen the bug this function
+// exists to close. Each case chdirs into a fixed base directory (via
+// t.Chdir, which restores it automatically) so relative paths in the table
+// are hermetic regardless of where the suite runs from.
+func TestArtStoreRoot_RelativeAbsoluteMismatch(t *testing.T) {
+	base := t.TempDir()
+	hubAbs := filepath.Join(base, "hub")
+	subAbs := filepath.Join(hubAbs, "00-conceptual")
+	fileInSubAbs := filepath.Join(subAbs, "drones.yaml")
+	outsideAbs := filepath.Join(base, "outside")
+	outsideFileAbs := filepath.Join(outsideAbs, "x.yaml")
+	// Shares a textual prefix with hubAbs ("…/hub" vs "…/hub2") — must not be
+	// mistaken for a descendant of it.
+	hubSiblingAbs := filepath.Join(base, "hub2")
+	siblingFileAbs := filepath.Join(hubSiblingAbs, "x.yaml")
+
+	for _, dir := range []string{subAbs, outsideAbs, hubSiblingAbs} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, f := range []string{fileInSubAbs, outsideFileAbs, siblingFileAbs} {
+		if err := os.WriteFile(f, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	tests := []struct {
+		name   string
+		input  string
+		hubDir string
+		want   string
+	}{
+		{
+			name:   "absolute hubDir, relative input inside it",
+			input:  "hub/00-conceptual/drones.yaml",
+			hubDir: hubAbs,
+			want:   hubAbs,
+		},
+		{
+			name:   "relative hubDir, absolute input inside it",
+			input:  fileInSubAbs,
+			hubDir: "hub",
+			// Contract: on containment, the hub form the caller configured is
+			// returned unchanged (not rewritten to absolute).
+			want: "hub",
+		},
+		{
+			name:   "absolute hubDir, relative input genuinely outside it",
+			input:  "outside/x.yaml",
+			hubDir: hubAbs,
+			want:   "outside",
+		},
+		{
+			name:   "sibling prefix, both absolute",
+			input:  siblingFileAbs,
+			hubDir: hubAbs,
+			want:   hubSiblingAbs,
+		},
+		{
+			name:   "sibling prefix, mixed relative hubDir and absolute input",
+			input:  siblingFileAbs,
+			hubDir: "hub",
+			want:   hubSiblingAbs,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Chdir(base)
+			got := artStoreRoot(tt.input, tt.hubDir)
+			if got != tt.want {
+				t.Errorf("artStoreRoot(%q, %q) = %q, want %q", tt.input, tt.hubDir, got, tt.want)
+			}
+		})
+	}
+}

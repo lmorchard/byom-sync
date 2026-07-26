@@ -350,14 +350,24 @@ func artStoreRoot(input, hubDir string) string {
 	if hubDir == "" {
 		return candidate
 	}
-	cleanHub := filepath.Clean(hubDir)
-	cleanCandidate := filepath.Clean(candidate)
-	rel, err := filepath.Rel(cleanHub, cleanCandidate)
+	// filepath.Rel errors when one argument is absolute and the other
+	// relative (e.g. hubDir from the "./playlists" config default against an
+	// absolute --input), which previously fell through to the pre-fix
+	// fallback — exactly the bug this function exists to close. Resolve both
+	// to absolute paths for the comparison only; the hub form the caller
+	// configured (relative or not) is still what gets returned, since it's
+	// used to build image_file values and the log line.
+	absHub, hubErr := filepath.Abs(hubDir)
+	absCandidate, candErr := filepath.Abs(candidate)
+	if hubErr != nil || candErr != nil {
+		return candidate
+	}
+	rel, err := filepath.Rel(absHub, absCandidate)
 	if err != nil {
 		return candidate
 	}
 	if rel == "." || !strings.HasPrefix(rel, "..") {
-		return cleanHub
+		return hubDir
 	}
 	return candidate
 }
