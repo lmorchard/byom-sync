@@ -803,21 +803,11 @@ func countMissingYouTube(p playlist.Playlist) int {
 	return n
 }
 
-// hubPaths returns the YAML files to process: a single file, or every *.yaml in
-// a directory.
+// hubPaths returns every playlist YAML under input, recursively. Thin
+// delegation to playlist.HubPaths so the resolvers, the exporters, and the site
+// generator share one definition of the hub.
 func hubPaths(input string) ([]string, error) {
-	info, err := os.Stat(input)
-	if err != nil {
-		return nil, fmt.Errorf("input %s: %w", input, err)
-	}
-	if !info.IsDir() {
-		return []string{input}, nil
-	}
-	matches, err := filepath.Glob(filepath.Join(input, "*.yaml"))
-	if err != nil {
-		return nil, err
-	}
-	return matches, nil
+	return playlist.HubPaths(input)
 }
 
 func init() {
