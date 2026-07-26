@@ -1012,7 +1012,7 @@ func init() {
 
 	resolveCmd.AddCommand(resolveAllCmd)
 	resolveAllCmd.Flags().StringVar(&allInput, "input", "", "hub YAML file or directory (default: config dir)")
-	resolveAllCmd.Flags().IntVar(&allLimit, "limit", 0, "max tracks attempted per stage (0 = unlimited)")
+	resolveAllCmd.Flags().IntVar(&allLimit, "limit", 0, "max tracks attempted per stage (0 = unlimited; art stage's Spotify pass is always unbounded)")
 	resolveAllCmd.Flags().DurationVar(&allDelay, "delay", 0, "override every stage's request pacing (default: each stage's own)")
 	resolveAllCmd.Flags().BoolVar(&allNoCache, "no-cache", false, "bypass the resolution caches for every stage")
 	resolveAllCmd.Flags().BoolVar(&allDownload, "download", true, "download cover art into <hub>/art and record image_file")

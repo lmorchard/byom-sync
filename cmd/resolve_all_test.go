@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestCheckPrereqs_AllPresent(t *testing.T) {
@@ -147,5 +148,78 @@ func TestResolveAllPrereqs_OnlyForEnabledStages(t *testing.T) {
 				t.Errorf("got %v want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+// runResolveAll fans its flags out to package-level globals that every stage,
+// and every other test in this package, reads. This test is the only one that
+// mutates them, so it must restore all of them — leaving e.g. artDownload or
+// resolveNoCache flipped would silently change what a later test sees, since
+// Go tests in one package share process state.
+func TestRunResolveAll_FansOutFlagsAndGatesDelay(t *testing.T) {
+	origResolveDelay, origArtDelay, origEnrichDelay := resolveDelay, artDelay, enrichDelay
+	origResolveInput, origArtInput, origEnrichInput := resolveInput, artInput, enrichInput
+	origResolveLimit, origArtLimit, origEnrichLimit := resolveLimit, artLimit, enrichLimit
+	origResolveNoCache, origArtNoCache, origEnrichNoCache := resolveNoCache, artNoCache, enrichNoCache
+	origArtDownload := artDownload
+	origAllSkipSpotify, origAllSkipArt, origAllSkipYouTube := allSkipSpotify, allSkipArt, allSkipYouTube
+	origAllInput, origAllNoCache, origAllDelay := allInput, allNoCache, allDelay
+	t.Cleanup(func() {
+		resolveDelay, artDelay, enrichDelay = origResolveDelay, origArtDelay, origEnrichDelay
+		resolveInput, artInput, enrichInput = origResolveInput, origArtInput, origEnrichInput
+		resolveLimit, artLimit, enrichLimit = origResolveLimit, origArtLimit, origEnrichLimit
+		resolveNoCache, artNoCache, enrichNoCache = origResolveNoCache, origArtNoCache, origEnrichNoCache
+		artDownload = origArtDownload
+		allSkipSpotify, allSkipArt, allSkipYouTube = origAllSkipSpotify, origAllSkipArt, origAllSkipYouTube
+		allInput, allNoCache, allDelay = origAllInput, origAllNoCache, origAllDelay
+	})
+
+	// Skip every stage so runResolveAll returns "every stage skipped" without
+	// touching the network or requiring credentials — but the fan-out and the
+	// prereq check both run before that early return, so this still exercises
+	// them.
+	if err := resolveAllCmd.Flags().Parse([]string{"--skip-spotify", "--skip-art", "--skip-youtube"}); err != nil {
+		t.Fatalf("parse flags: %v", err)
+	}
+	allInput = "/tmp/fake-hub-for-test"
+	allNoCache = true
+
+	err := runResolveAll(context.Background(), resolveAllCmd)
+	if err == nil || !strings.Contains(err.Error(), "every stage skipped") {
+		t.Fatalf("expected \"every stage skipped\" error, got %v", err)
+	}
+
+	if resolveInput != allInput || artInput != allInput || enrichInput != allInput {
+		t.Errorf("input fan-out: resolveInput=%q artInput=%q enrichInput=%q, want all %q",
+			resolveInput, artInput, enrichInput, allInput)
+	}
+	if !resolveNoCache || !artNoCache || !enrichNoCache {
+		t.Errorf("no-cache fan-out: resolveNoCache=%v artNoCache=%v enrichNoCache=%v, want all true",
+			resolveNoCache, artNoCache, enrichNoCache)
+	}
+
+	// Without --delay, each stage's own tuned pacing must survive untouched.
+	// DurationVar assigns these defaults at flag-registration time, so they're
+	// genuinely live in the globals here, not just at rest in the flag spec.
+	if resolveDelay != 500*time.Millisecond {
+		t.Errorf("resolveDelay = %v, want untouched youtube default 500ms", resolveDelay)
+	}
+	if artDelay != 1100*time.Millisecond {
+		t.Errorf("artDelay = %v, want untouched art default 1100ms", artDelay)
+	}
+	if enrichDelay != 200*time.Millisecond {
+		t.Errorf("enrichDelay = %v, want untouched spotify default 200ms", enrichDelay)
+	}
+
+	// With --delay explicitly passed, it must override all three.
+	if err := resolveAllCmd.Flags().Parse([]string{"--skip-spotify", "--skip-art", "--skip-youtube", "--delay=3s"}); err != nil {
+		t.Fatalf("parse flags: %v", err)
+	}
+	if err := runResolveAll(context.Background(), resolveAllCmd); err == nil || !strings.Contains(err.Error(), "every stage skipped") {
+		t.Fatalf("expected \"every stage skipped\" error, got %v", err)
+	}
+	if resolveDelay != 3*time.Second || artDelay != 3*time.Second || enrichDelay != 3*time.Second {
+		t.Errorf("delay override: resolveDelay=%v artDelay=%v enrichDelay=%v, want all 3s",
+			resolveDelay, artDelay, enrichDelay)
 	}
 }
