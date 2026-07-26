@@ -338,6 +338,30 @@ func applyTrackArt(p *playlist.Playlist, artByID map[string]string) int {
 	return filled
 }
 
+// artStoreRoot returns the directory the cover-art store lives under. image_file
+// values are hub-relative, so the store must be anchored at the hub root even
+// when --input narrows the run to one playlist or one section; otherwise the
+// site resolves image_file against the wrong directory and every cover 404s.
+func artStoreRoot(input, hubDir string) string {
+	candidate := input
+	if fi, statErr := os.Stat(input); statErr == nil && !fi.IsDir() {
+		candidate = filepath.Dir(input)
+	}
+	if hubDir == "" {
+		return candidate
+	}
+	cleanHub := filepath.Clean(hubDir)
+	cleanCandidate := filepath.Clean(candidate)
+	rel, err := filepath.Rel(cleanHub, cleanCandidate)
+	if err != nil {
+		return candidate
+	}
+	if rel == "." || !strings.HasPrefix(rel, "..") {
+		return cleanHub
+	}
+	return candidate
+}
+
 func runResolveArt(ctx context.Context) error {
 	input := artInput
 	if input == "" {
@@ -352,10 +376,7 @@ func runResolveArt(ctx context.Context) error {
 		return nil
 	}
 
-	artRoot := input
-	if fi, statErr := os.Stat(input); statErr == nil && !fi.IsDir() {
-		artRoot = filepath.Dir(input)
-	}
+	artRoot := artStoreRoot(input, viper.GetString("dir"))
 	var store *artstore.Store
 	if artDownload {
 		store = &artstore.Store{Root: artRoot, HTTP: http.DefaultClient}

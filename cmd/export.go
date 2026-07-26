@@ -54,7 +54,13 @@ var exportJSPFCmd = &cobra.Command{
 
 // artRootOf returns the directory to resolve a track's hub-relative ImageFile
 // against: the input's own directory when it's a file, else the input itself.
-// Mirrors the same logic used by "resolve art --download".
+//
+// NOTE: this has the same "wrong root when --input is a single file or
+// subdirectory of the hub" bug that "resolve art --download" had — see
+// artStoreRoot in cmd/resolve.go, which anchors at the configured hub root
+// instead. Fixing that here (embed-art on a subdirectory export) is a
+// separate, deliberately out-of-scope change; artStoreRoot is the pattern to
+// follow when someone picks it up.
 func artRootOf(input string) string {
 	if fi, err := os.Stat(input); err == nil && !fi.IsDir() {
 		return filepath.Dir(input)
