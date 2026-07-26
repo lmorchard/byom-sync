@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/lmorchard/byom-sync/internal/artstore"
@@ -808,6 +809,30 @@ func countMissingYouTube(p playlist.Playlist) int {
 // generator share one definition of the hub.
 func hubPaths(input string) ([]string, error) {
 	return playlist.HubPaths(input)
+}
+
+// prereq is one external requirement of an enrichment stage: a name for the
+// message, a cheap local check, and what the user should do about it.
+type prereq struct {
+	name   string
+	check  func() error
+	remedy string
+}
+
+// checkPrereqs runs every check and reports all failures in a single error.
+// Deliberately not fail-fast: someone missing both a Spotify token and yt-dlp
+// should learn that once, not discover the second after fixing the first.
+func checkPrereqs(reqs []prereq) error {
+	var missing []string
+	for _, r := range reqs {
+		if err := r.check(); err != nil {
+			missing = append(missing, fmt.Sprintf("  - %s: %v\n    fix: %s", r.name, err, r.remedy))
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	return fmt.Errorf("missing prerequisites:\n%s", strings.Join(missing, "\n"))
 }
 
 func init() {
