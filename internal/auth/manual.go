@@ -27,14 +27,25 @@ func ParseManualRedirect(pasted, wantState string) (string, error) {
 		return "", errors.New("nothing pasted — expected the redirect URL or the code from it")
 	}
 
+	hasScheme := strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://")
+
 	// A bare code has no scheme and no query string.
-	if !strings.HasPrefix(s, "http://") && !strings.HasPrefix(s, "https://") && !strings.Contains(s, "?") {
+	if !hasScheme && !strings.Contains(s, "?") {
 		return s, nil
+	}
+
+	// Browsers hide the scheme in the address bar, so pasting
+	// "127.0.0.1:8888/callback?code=...&state=..." without "http://" is the
+	// likely-common case, not an edge case. Without a scheme, url.Parse reads
+	// "127.0.0.1" as a path segment containing a colon and rejects it
+	// outright, so add the scheme back before parsing.
+	if !hasScheme && (strings.HasPrefix(s, "127.0.0.1") || strings.HasPrefix(s, "localhost")) {
+		s = "http://" + s
 	}
 
 	u, err := url.Parse(s)
 	if err != nil {
-		return "", fmt.Errorf("parse pasted URL: %w", err)
+		return "", fmt.Errorf("parse pasted URL: %w (paste the full URL including http://)", err)
 	}
 	q := u.Query()
 

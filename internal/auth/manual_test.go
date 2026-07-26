@@ -46,6 +46,19 @@ func TestParseManualRedirect(t *testing.T) {
 			pasted:  "   \n",
 			wantErr: true,
 		},
+		{
+			// Browsers hide the scheme in the address bar, so a paste that
+			// starts right at the host is a likely-common shape, not a rare
+			// one — it must not surface a raw url.Parse error.
+			name:   "scheme-less redirect starting with the loopback address",
+			pasted: "127.0.0.1:8888/callback?code=THECODE&state=abc123",
+			want:   "THECODE",
+		},
+		{
+			name:   "scheme-less redirect starting with localhost",
+			pasted: "localhost:8888/callback?code=THECODE&state=abc123",
+			want:   "THECODE",
+		},
 	}
 
 	for _, tt := range tests {
