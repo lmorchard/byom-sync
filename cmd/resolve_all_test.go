@@ -172,6 +172,15 @@ func TestRunResolveAll_FansOutFlagsAndGatesDelay(t *testing.T) {
 		artDownload = origArtDownload
 		allSkipSpotify, allSkipArt, allSkipYouTube = origAllSkipSpotify, origAllSkipArt, origAllSkipYouTube
 		allInput, allNoCache, allDelay = origAllInput, origAllNoCache, origAllDelay
+
+		// t.Cleanup can restore the Go variables above, but not pflag's own
+		// per-flag Changed bool. Without resetting it here, this test's
+		// Parse("--delay=3s") call leaves resolveAllCmd's "delay" flag marked
+		// Changed for the rest of the test binary's life, so a later test
+		// calling runResolveAll would silently inherit it.
+		for _, name := range []string{"delay", "skip-spotify", "skip-art", "skip-youtube"} {
+			resolveAllCmd.Flags().Lookup(name).Changed = false
+		}
 	})
 
 	// Skip every stage so runResolveAll returns "every stage skipped" without
@@ -196,6 +205,16 @@ func TestRunResolveAll_FansOutFlagsAndGatesDelay(t *testing.T) {
 	if !resolveNoCache || !artNoCache || !enrichNoCache {
 		t.Errorf("no-cache fan-out: resolveNoCache=%v artNoCache=%v enrichNoCache=%v, want all true",
 			resolveNoCache, artNoCache, enrichNoCache)
+	}
+	if resolveLimit != allLimit || artLimit != allLimit || enrichLimit != allLimit {
+		t.Errorf("limit fan-out: resolveLimit=%d artLimit=%d enrichLimit=%d, want all %d",
+			resolveLimit, artLimit, enrichLimit, allLimit)
+	}
+	// --download defaults to true, which is the spec's most surprising
+	// decision (and, per the cover-art store root bug, its most consequential
+	// one) — pin that the art stage actually receives it.
+	if artDownload != allDownload {
+		t.Errorf("download fan-out: artDownload=%v, want allDownload=%v", artDownload, allDownload)
 	}
 
 	// Without --delay, each stage's own tuned pacing must survive untouched.
