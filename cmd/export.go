@@ -13,9 +13,12 @@ var exportCmd = &cobra.Command{
 	Short: "Compile playlist YAML into destination formats (m3u8, jspf, markdown)",
 	Long: `Compile the local playlist "hub" (YAML) into destination "spoke" formats.
 
---input may be a single YAML file or a directory of them. When it is a directory,
---out is treated as an output directory and each playlist is written as
-"<input-basename>.<ext>".`,
+--input may be a single YAML file or a directory. When it is a directory, the
+hub is walked recursively and --out mirrors its structure — so
+"00-conceptual/drones.yaml" exports to "<out>/00-conceptual/drones.<ext>".
+Mirroring (rather than flattening) means two playlists with the same basename
+in different folders can't overwrite each other. When --input is a single file,
+--out is the exact output path.`,
 }
 
 var (
@@ -51,7 +54,13 @@ var exportJSPFCmd = &cobra.Command{
 
 // artRootOf returns the directory to resolve a track's hub-relative ImageFile
 // against: the input's own directory when it's a file, else the input itself.
-// Mirrors the same logic used by "resolve art --download".
+//
+// NOTE: this has the same "wrong root when --input is a single file or
+// subdirectory of the hub" bug that "resolve art --download" had — see
+// artStoreRoot in cmd/resolve.go, which anchors at the configured hub root
+// instead. Fixing that here (embed-art on a subdirectory export) is a
+// separate, deliberately out-of-scope change; artStoreRoot is the pattern to
+// follow when someone picks it up.
 func artRootOf(input string) string {
 	if fi, err := os.Stat(input); err == nil && !fi.IsDir() {
 		return filepath.Dir(input)

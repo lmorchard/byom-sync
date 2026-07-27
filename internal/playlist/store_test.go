@@ -3,6 +3,8 @@ package playlist
 import (
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
@@ -176,6 +178,152 @@ func TestSaveFileOverwritesAtomicallyLeavingNoTemp(t *testing.T) {
 			names = append(names, e.Name())
 		}
 		t.Errorf("expected only pl.yaml, got %v", names)
+	}
+}
+
+// mkfile creates path (with parents) holding minimal valid playlist YAML.
+func mkfile(t *testing.T, path string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("title: x\ntracks: []\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestHubPaths(t *testing.T) {
+	dir := t.TempDir()
+	mkfile(t, filepath.Join(dir, "root.yaml"))
+	mkfile(t, filepath.Join(dir, "01-covers", "beta.yaml"))
+	mkfile(t, filepath.Join(dir, "01-covers", "alpha.yaml"))
+	mkfile(t, filepath.Join(dir, "00-conceptual", "deep", "nested.yaml"))
+	// The hub-root cover-art store holds images, not playlists.
+	mkfile(t, filepath.Join(dir, "art", "stray.yaml"))
+	// A nested dir that merely happens to be named "art" is NOT the store.
+	mkfile(t, filepath.Join(dir, "01-covers", "art", "kept.yaml"))
+	// Editor/VCS cruft and macOS AppleDouble sidecars.
+	mkfile(t, filepath.Join(dir, ".hidden.yaml"))
+	mkfile(t, filepath.Join(dir, "01-covers", "._beta.yaml"))
+	mkfile(t, filepath.Join(dir, ".git", "config.yaml"))
+	// Non-YAML is ignored.
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("hi"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := HubPaths(dir)
+	if err != nil {
+		t.Fatalf("HubPaths: %v", err)
+	}
+
+	want := []string{
+		filepath.Join(dir, "00-conceptual", "deep", "nested.yaml"),
+		filepath.Join(dir, "01-covers", "alpha.yaml"),
+		filepath.Join(dir, "01-covers", "art", "kept.yaml"),
+		filepath.Join(dir, "01-covers", "beta.yaml"),
+		filepath.Join(dir, "root.yaml"),
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %d paths, want %d:\ngot:  %v\nwant: %v", len(got), len(want), got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("path %d: got %q want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestHubPaths_SingleFileReturnedAsIs(t *testing.T) {
+	dir := t.TempDir()
+	f := filepath.Join(dir, "one.yaml")
+	mkfile(t, f)
+
+	got, err := HubPaths(f)
+	if err != nil {
+		t.Fatalf("HubPaths: %v", err)
+	}
+	if len(got) != 1 || got[0] != f {
+		t.Errorf("got %v, want [%s]", got, f)
+	}
+}
+
+func TestHubPaths_EmptyDirIsNotAnError(t *testing.T) {
+	got, err := HubPaths(t.TempDir())
+	if err != nil {
+		t.Fatalf("HubPaths: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("got %v, want empty", got)
+	}
+}
+
+func TestHubPaths_MissingInputErrors(t *testing.T) {
+	if _, err := HubPaths(filepath.Join(t.TempDir(), "nope")); err == nil {
+		t.Error("expected an error for a missing input path")
+	}
+}
+
+// A symlinked hub root (a NAS mount or cloud-synced folder, say) must be
+// walked like a real directory, not silently treated as an empty leaf.
+func TestHubPaths_FollowsSymlinkedRoot(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlinks need elevated privileges on windows")
+	}
+
+	base := t.TempDir()
+	real := filepath.Join(base, "real")
+	mkfile(t, filepath.Join(real, "root.yaml"))
+	mkfile(t, filepath.Join(real, "sub", "nested.yaml"))
+
+	link := filepath.Join(base, "link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := HubPaths(link)
+	if err != nil {
+		t.Fatalf("HubPaths: %v", err)
+	}
+
+	want := []string{
+		filepath.Join(link, "root.yaml"),
+		filepath.Join(link, "sub", "nested.yaml"),
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %d paths, want %d:\ngot:  %v\nwant: %v", len(got), len(want), got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("path %d: got %q want %q", i, got[i], want[i])
+		}
+		// The symlink path is the caller's prefix — never the resolved target.
+		if !strings.HasPrefix(got[i], link) {
+			t.Errorf("path %d: %q does not carry the symlink prefix %q", i, got[i], link)
+		}
+	}
+}
+
+// Load keeps its documented contract: a missing hub dir is empty, not an error
+// (the first sync creates it).
+func TestLoad_MissingDirYieldsEmpty(t *testing.T) {
+	got, err := Load(filepath.Join(t.TempDir(), "not-created-yet"))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("got %v, want empty", got)
+	}
+}
+
+func TestLoad_IsRecursive(t *testing.T) {
+	dir := t.TempDir()
+	mkfile(t, filepath.Join(dir, "sub", "one.yaml"))
+	got, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("got %d playlists, want 1", len(got))
 	}
 }
 

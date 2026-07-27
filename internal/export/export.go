@@ -17,9 +17,12 @@ type Exporter interface {
 	Export(p playlist.Playlist, outputPath string, cfg map[string]string) error
 }
 
-// Run dispatches input to e. When input is a directory, every *.yaml file is
-// exported to out (treated as a directory) as "<input-basename>.<ext>". When
-// input is a single file, out is the exact output path.
+// Run dispatches input to e. When input is a directory, every playlist YAML
+// under it is exported recursively and the hub's structure is mirrored beneath
+// out — "00-conceptual/drones.yaml" becomes "<out>/00-conceptual/drones.<ext>".
+// Mirroring (rather than flattening) means two playlists with the same
+// basename in different folders can't overwrite each other. When input is a
+// single file, out is the exact output path.
 func Run(e Exporter, ext, input, out string, cfg map[string]string) error {
 	info, err := os.Stat(input)
 	if err != nil {
@@ -34,20 +37,26 @@ func Run(e Exporter, ext, input, out string, cfg map[string]string) error {
 		return e.Export(p, out, cfg)
 	}
 
-	matches, err := filepath.Glob(filepath.Join(input, "*.yaml"))
+	paths, err := playlist.HubPaths(input)
 	if err != nil {
 		return err
 	}
 	if err := os.MkdirAll(out, 0o755); err != nil {
 		return err
 	}
-	for _, path := range matches {
+	for _, path := range paths {
 		p, err := playlist.LoadFile(path)
 		if err != nil {
 			return fmt.Errorf("load %s: %w", path, err)
 		}
-		base := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
-		outPath := filepath.Join(out, base+"."+ext)
+		rel, err := filepath.Rel(input, path)
+		if err != nil {
+			return fmt.Errorf("relativize %s: %w", path, err)
+		}
+		outPath := filepath.Join(out, strings.TrimSuffix(rel, filepath.Ext(rel))+"."+ext)
+		if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
+			return err
+		}
 		if err := e.Export(p, outPath, cfg); err != nil {
 			return fmt.Errorf("export %s: %w", path, err)
 		}
