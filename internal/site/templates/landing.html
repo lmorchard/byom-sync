@@ -5,6 +5,12 @@
 {{template "siteheader" .}}
 <main>
 {{if .Intro}}<section class="intro">{{.Intro}}</section>{{end}}
+{{with featuredOf .Root}}
+<h2 class="year featured">Featured</h2>
+<div class="playlist-cards">
+{{range .}}{{template "playlistCard" .}}{{end}}
+</div>
+{{end}}
 <section class="tree">{{template "treeList" .Root.Children}}</section>
 </main>
 {{template "footer" .}}
@@ -23,12 +29,14 @@
 {{range yearGroupsOf $children}}
 <h2 class="year">{{.Label}}</h2>
 <div class="playlist-cards">
-{{range .Playlists}}
+{{range .Playlists}}{{template "playlistCard" .}}{{end}}
+</div>
+{{end}}
+{{end}}
+
+{{define "playlistCard"}}
   <a class="playlist-card" href="/{{.Path}}/">
     {{with playlistCover .Playlist}}<img class="cover" src="{{.}}" alt="" loading="lazy">{{else}}<span class="cover placeholder"></span>{{end}}
     <span class="body"><span class="title">{{.Title}}</span><span class="meta">{{playlistMeta .Playlist}}</span>{{if .Playlist.Description}}<span class="blurb">{{plainText .Playlist.Description}}</span>{{end}}</span>
   </a>
-{{end}}
-</div>
-{{end}}
 {{end}}
