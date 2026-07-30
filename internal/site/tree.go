@@ -93,14 +93,7 @@ func buildDir(fsDir, urlPath, name string) (*Node, error) {
 			return a.Name < b.Name
 		}
 		// Playlists: newest DateUpdated first; undated (zero) last; ties by Title.
-		au, bu := a.Playlist.DateUpdated, b.Playlist.DateUpdated
-		if au.IsZero() != bu.IsZero() {
-			return !au.IsZero()
-		}
-		if !au.Equal(bu) {
-			return au.After(bu)
-		}
-		return a.Title < b.Title
+		return playlistNodeLess(a, b)
 	})
 	return node, nil
 }

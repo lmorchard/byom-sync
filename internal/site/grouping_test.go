@@ -36,3 +36,59 @@ func TestYearGroupsOf(t *testing.T) {
 		t.Errorf("labels = %s, %s", groups[1].Label, groups[2].Label)
 	}
 }
+
+func TestFeaturedOf(t *testing.T) {
+	pl := func(title, updated string, featured bool) *Node {
+		n := &Node{
+			Name:     title,
+			Title:    title,
+			Playlist: &playlist.Playlist{Title: title, Featured: featured},
+		}
+		if updated != "" {
+			n.Playlist.DateUpdated, _ = time.Parse(time.RFC3339, updated)
+		}
+		return n
+	}
+	// Featured playlists live at the root and nested two directories deep; the
+	// list is flat and globally date-ordered regardless of where they're filed.
+	root := &Node{IsDir: true, Children: []*Node{
+		{Name: "archive", IsDir: true, Children: []*Node{
+			pl("deep", "2021-05-01T00:00:00Z", true),
+			pl("deep-plain", "2024-01-01T00:00:00Z", false),
+			{Name: "deeper", IsDir: true, Children: []*Node{
+				pl("deepest", "2026-01-01T00:00:00Z", true),
+			}},
+		}},
+		pl("newest", "2026-07-01T00:00:00Z", true),
+		pl("plain", "2026-07-02T00:00:00Z", false),
+		pl("undated", "", true),
+		pl("zed", "2026-01-01T00:00:00Z", true), // ties with "deepest" on date
+	}}
+
+	got := featuredOf(root)
+	var titles []string
+	for _, n := range got {
+		titles = append(titles, n.Title)
+	}
+	want := []string{"newest", "deepest", "zed", "deep", "undated"}
+	if len(titles) != len(want) {
+		t.Fatalf("featuredOf titles = %v, want %v", titles, want)
+	}
+	for i := range want {
+		if titles[i] != want[i] {
+			t.Fatalf("featuredOf titles = %v, want %v", titles, want)
+		}
+	}
+}
+
+func TestFeaturedOf_NoneFeatured(t *testing.T) {
+	root := &Node{IsDir: true, Children: []*Node{
+		{Name: "d", IsDir: true, Children: []*Node{
+			{Name: "x", Title: "X", Playlist: &playlist.Playlist{Title: "X"}},
+		}},
+		{Name: "y", Title: "Y", Playlist: &playlist.Playlist{Title: "Y"}},
+	}}
+	if got := featuredOf(root); len(got) != 0 {
+		t.Errorf("featuredOf = %+v, want empty", got)
+	}
+}
