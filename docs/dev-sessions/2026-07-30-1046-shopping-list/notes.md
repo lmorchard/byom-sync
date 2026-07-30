@@ -2,12 +2,13 @@
 
 ## Session summary
 
-Brainstorm-only session. Produced `spec.md` and two GitHub issues; no code
-written.
+Brainstorm-and-measure session. Produced `spec.md` and three GitHub issues; no
+code written. A substantial part of the value was measurement: three design
+decisions were reversed by data collected during the session.
 
 ## How the design moved
 
-The idea arrived as "a shopping list from a playlist in the player." Two
+The idea arrived as "a shopping list from a playlist in the player." Several
 corrections reshaped it.
 
 **Fetching belongs in site generation, not the browser.** The first proposal put
@@ -32,13 +33,29 @@ architecture it prevented.
 availability scan never starts on its own — only on explicit user action, with
 progress indication.
 
-**A research pass changed the primary source.** After the first spec was written,
+**Two research passes changed the design; the second reversed the first.** After the first spec was written,
 a round of source research found that Bandcamp's own undocumented search endpoint
 does MusicBrainz's job better: one request instead of up to four, an exact album
-URL with no edition-picking, and a measured 53% hit rate on the real hub. The
-design moved to a four-tier cascade with MusicBrainz demoted to the sanctioned
+URL with no edition-picking, and a roughly 50% hit rate on the real hub (later
+pinned at 47%). The
+design moved to a four-tier cascade with MusicBrainz demoted to sanctioned
 fallback. Cover art from the same endpoint was split out to byom-sync#54 and
 dropped from this session entirely.
+
+Then the tiers were actually measured, and MusicBrainz was dropped outright. Run
+against the 32 albums Bandcamp missed it returned **1 hit for 60 requests** — and
+that one hit, Protocell's *Magonia*, resolves to an Apple Music id that iTunes
+returns directly. Its unique contribution across 60 albums was zero. iTunes turned
+out to be the real second tier at **65%** of the residue for one request each.
+
+Final funnel on a 60-album sample: Bandcamp 28/60 (47%), iTunes 20/31 of the
+residue (65%), Discogs 13/31 with 2 unique. **85% cumulative, identical with or
+without MusicBrainz.**
+
+The lesson is the same one the sidecar question taught, applied to a source
+instead of a schema: the mechanism working says nothing about whether the data is
+there. MusicBrainz's `url-rels` endpoint does exactly what the docs say. It just
+doesn't have many purchase URLs in it.
 
 ## Verified rather than assumed
 
@@ -51,8 +68,9 @@ Everything in the source table was probed live, not read off documentation:
   that only apply in a browser, and the architecture had already moved resolution
   into Go.
 - MusicBrainz `?inc=url-rels` yields typed purchase relations, but the Amanda
-  Palmer probe hit on only one of three same-titled releases — the edition-picking
-  problem, and the reason for the 3-lookup cap.
+  Palmer probe hit on only one of three same-titled releases. That looked like an
+  edition-picking problem to solve with a lookup cap; measurement later showed it
+  was simply thin coverage, and the tier was dropped rather than tuned.
 - iTunes answered a *Theatre Is Evil* query with *Piano Is Evil*. A real album,
   wrong one, no signal. That single result is why the confidence gate is a
   requirement rather than a nicety.
@@ -65,26 +83,47 @@ Both times the useful move was to stop arguing and query the hub or the API:
 
 - The sidecar-vs-per-track question dissolved once the duplication factor turned
   out to be 1.93 rather than the ~10x being implicitly assumed.
+- The tier order inverted once measured. MusicBrainz was the confident first
+  choice on two separate drafts and turned out to contribute nothing.
+- A hit-rate claim got corrected by re-sampling: 53% from one 30-album run did
+  not reproduce at n=60, so 47% is the planning number and the normalization
+  "lift" was noise. Cheap normalization is still worth keeping; the number
+  attached to it was not.
 - "Is Bandcamp worth building" dissolved once a 30-album sample returned 47%,
   and the miss list showed the failures were mostly compilations and major-label
   catalog — i.e. correct misses, not fixable ones. The two that *were* fixable
   pointed straight at the comma-joined-artist normalization.
 
+## The confidence gate earned its place empirically
+
+It was added because iTunes answered a *Theatre Is Evil* query with *Piano Is
+Evil*. In the measured run it caught the same failure three more times: Ride's
+*Peace Sign* → "Classical Music for Zodiac Signs" (0.37), Rob Zombie's *Hellbilly
+Deluxe* → "The Sinister Urge" (0.62), Sara Lov's *I Already Love You* →
+"Summertime Blues - EP" (0.21).
+
+Scores came out bimodal — accepted matches at 1.00, rejected at 0.62 and below —
+so the inherited 0.8 threshold sits in a wide gap rather than on a cliff.
+
+Worth noting against our own interest: two of those three rejections are real
+albums iTunes probably stocks, and Discogs found both. The gate did its job; the
+query construction is what failed. That is the biggest remaining lever.
+
 ## Open questions for implementation
 
-- Is 0.8 the right confidence threshold for purchase sources? Inherited from
-  `spotifyenrich`, never tuned against these responses.
-- MusicBrainz candidate strategy: release search scored by artist+title, or
-  release-group first then browse its releases? Worth a spike before tier 2.
-- Is the 3-lookup edition cap right? A cost bound, not measured against hit rate.
-- **Tiers 3 and 4 rest on single probes.** Their hit rate against the residue that
-  Bandcamp and MusicBrainz both miss is unmeasured. Sample them the way tier 1 was
-  sampled before building them — the residue is disproportionately compilations
-  and major-label catalog, which is exactly where iTunes should do well and
-  Bandcamp can't, but that's a hypothesis, not a measurement.
+- iTunes query construction — `attribute=albumTerm` or separate artist/album
+  terms, then re-measure. Likely worth more than any additional tier.
+- Is Discogs worth building? 2 unique albums out of 60 is 3 percentage points.
+  Shipping tiers 1–2 and stopping is defensible.
+- Tiers 2 and 3 have one measurement each. Bandcamp has two agreeing samples.
 
 ## Next
 
 Nothing is scheduled. Phase B (player panel) is shippable without Phase A because
 the search-URL fallback covers every row, so either can go first. Within Phase A,
-tier 1 alone is a legitimate stopping point: cheapest pass, highest yield.
+tier 1 alone is a legitimate stopping point: cheapest pass, best links.
+
+Raw measurement output is untracked scratch at `tmp/purchase-research/` in the
+primary checkout — stage1/2/3 JSON with the full hit and miss lists, should any of
+this need re-checking. Not committed, and not durable; the numbers that matter are
+in `spec.md`.

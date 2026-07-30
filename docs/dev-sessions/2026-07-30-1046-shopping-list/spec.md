@@ -50,13 +50,27 @@ links exist anywhere.
 Every source below was probed against live APIs on 2026-07-30. Numbers are
 measured, not quoted from documentation.
 
-| Source | Reqs/album | Rate limit | Returns | Role |
+| Source | Reqs/album | Rate limit | Hit rate (measured) | Role |
 | --- | --- | --- | --- | --- |
-| Bandcamp (undocumented) | 1 | unpublished | Exact album + track URLs | Tier 1 |
-| MusicBrainz `url-rels` | up to 4 | ~1/s | Typed purchase relations | Tier 2 |
-| iTunes Search | 1 | ~20/min | Priced `music.apple.com` links | Tier 3 |
-| Discogs | 1 | 25/min unauth, 60 auth | Marketplace listings (physical) | Tier 4 |
-| Odesli / song.link | 1 | 10/min | Amazon store links, **no Bandcamp** | Rejected |
+| Bandcamp (undocumented) | 1 | unpublished | 47% of all albums | Tier 1 |
+| iTunes Search | 1 | ~20/min | 65% of tier-1 misses | Tier 2 |
+| Discogs | 1 | 25/min unauth, 60 auth | 42% of tier-1 misses, +2 unique | Tier 3 |
+| MusicBrainz `url-rels` | 2+ | ~1/s | **3%, zero unique** | Dropped |
+| Odesli / song.link | 1 | 10/min | not reached — no Bandcamp coverage | Rejected |
+
+### The funnel, measured end to end
+
+A 60-album random sample of the live hub, each tier run only on what the
+previous tiers missed, with the confidence gate applied throughout:
+
+| Tier | Input | Hits | Rate | Requests |
+| --- | --- | --- | --- | --- |
+| 1 Bandcamp | 60 | 28 | 47% | 60 |
+| 2 MusicBrainz | 32 | 1 | 3% | 60 |
+| 3 iTunes | 31 | 20 | 65% | 31 |
+| 4 Discogs | 31 | 13 (2 unique) | 42% | 31 |
+
+**Cumulative coverage is 51/60 = 85%, identical with or without MusicBrainz.**
 
 ### Bandcamp — the best source, and unsanctioned
 
@@ -73,10 +87,13 @@ than a search plus up to three edition lookups. `search_filter: "t"` does the
 same for individual tracks, which covers both albumless tracks and the common
 "I only want this one song" case.
 
-**Measured hit rate against the live hub:** a 30-album random sample returned
-14/30 = 47%, rising to 16/30 = 53% with query normalization (below). Remaining
-misses are largely correct: compilations ("80s Rock Essentials") and major-label
-catalog (Shinedown, Fluke, Robert Miles) that genuinely aren't on Bandcamp.
+**Measured hit rate against the live hub: 47%**, consistent across two
+independent random samples (14/30 and 28/60, the second with normalization
+already applied). An earlier 30-album run suggested normalization lifted this to
+53%; the larger sample did not reproduce that, so 47% is the number to plan
+against and the lift was noise. Remaining misses are largely correct:
+compilations ("80s Rock Essentials") and major-label catalog (Shinedown, Fluke,
+Robert Miles) genuinely absent from Bandcamp.
 
 **It fails cleanly.** A query for The Smiths' *The Queen Is Dead* — major label,
 definitely absent — returned zero results rather than a wrong guess.
@@ -88,34 +105,58 @@ personal tool making a one-time, heavily cached pass at about one request per
 second. The mitigation is architectural, not legal: it is one tier of a cascade,
 so if it breaks the pass degrades to sanctioned sources rather than dying.
 
-### MusicBrainz — sanctioned, slower, spottier
+### MusicBrainz — dropped after measurement
+
+The original design made this tier 1. Measurement removed it entirely.
 
 `GET /ws/2/release/<mbid>?inc=url-rels` returns typed relations including
-`purchase for download` (type `98e08c20-8402-4163-8970-53504bb6a1e4`). A probe
-for *Theatre Is Evil* returned the same Bandcamp URL, but via a
-`download for free` relation.
+`purchase for download` (type `98e08c20-8402-4163-8970-53504bb6a1e4`), and the
+mechanism works. The data isn't there. Run against the 32 albums Bandcamp missed,
+it produced **1 hit for 60 requests** — the most expensive tier and the least
+productive.
 
-Coverage is per-edition and thin: that probe found three MusicBrainz releases
-with the title, and only one carried the link — the second had an Amazon ASIN,
-the third nothing. `ws/2` sends `access-control-allow-origin: *`, which is
-irrelevant here since resolution happens server-side.
+The request math rules out the confidence gate as the cause: 32 searches plus 28
+detail lookups means candidate releases *were* found and fetched. They simply
+carry no purchase relations. MusicBrainz catalogues releases thoroughly and
+purchase URLs sparsely.
 
-### iTunes — broad, but silently wrong
+Its single hit was Protocell's *Magonia*, resolving to
+`music.apple.com/.../1786770588`. Because tier 2 consumed it, iTunes never got a
+turn — so it was checked directly afterward, and iTunes returns **the same album
+id**. MusicBrainz's unique contribution across the whole sample is zero.
+
+Dropping it also deletes the edition-picking problem, the 3-lookup cap, and the
+open question about candidate strategy.
+
+### iTunes — the real tier 2
 
 `GET https://itunes.apple.com/search?entity=album` needs no key and returns
-`collectionViewUrl` plus a `collectionPrice`, confirming purchasability.
+`collectionViewUrl` plus `collectionPrice`. Measured on the 31 albums Bandcamp
+and MusicBrainz both missed: **20 hits, 65%**, one request each, every one
+carrying a real price.
 
-It is the reason the confidence gate is mandatory: a query for
+It is also the reason the confidence gate exists. An early probe for
 "amanda palmer theatre is evil" returned ***Piano Is Evil*** — a real but
-different album, with no signal that it was a poor match. Any tier that answers
-fuzzily must be scored and thresholded.
+different album, with no signal it was a poor match. In the measured run the gate
+caught the same failure mode three times: Ride's *Peace Sign* matched against
+"Classical Music for Zodiac Signs" (0.37), Rob Zombie's *Hellbilly Deluxe*
+against "The Sinister Urge" (0.62), Sara Lov's *I Already Love You* against
+"Summertime Blues - EP" (0.21).
 
-### Discogs — a different kind of buying
+Two of those three are real albums iTunes very likely stocks — Discogs found
+both — so 65% probably understates iTunes and reflects query construction rather
+than catalogue coverage. Worth trying `attribute=albumTerm` or separate
+artist/album terms.
 
-Unauthenticated search works (HTTP 200) and reports its budget in
-`x-discogs-ratelimit: 25` per minute; 60 with a token. Discogs is a marketplace
-for physical media, so it answers "buy the vinyl" rather than "buy the download."
-Included as the last tier precisely because it covers what the others can't.
+### Discogs — small but genuinely additive
+
+Unauthenticated search works and reports its budget in `x-discogs-ratelimit: 25`
+per minute; 60 with a token. On the same 31-album residue it scored 13 hits
+(42%), but 11 overlapped iTunes — **its unique contribution is 2 albums**, both
+of them cases where iTunes' search failed to surface a record it probably has.
+
+Kept as the last tier because it is one request, it covers physical media the
+others don't, and those 2 albums are 6% of the residue. Reasonable to defer.
 
 ### Odesli — rejected
 
@@ -140,13 +181,13 @@ constructed search URLs, so it does not block on Phase A's slow initial fill.
 
 A new enrichment command with the same ergonomics as its siblings: `--input`,
 `--limit`, `--delay`, attempts only what's unresolved, resumable. Plus
-`--source bandcamp|musicbrainz|itunes|discogs|all` (default `all`).
+`--source bandcamp|itunes|discogs|all` (default `all`).
 
 **Tier-at-a-time, not per-album cascade.** Each tier runs as its own pass over
 everything still unresolved, in order. This matters for three reasons: every pass
 is a simple single-source loop with one rate limit, each is independently
-resumable, and stopping after tier 1 is a legitimate outcome rather than a
-half-finished state. A per-album cascade would interleave four different rate
+resumable, and stopping after any tier is a legitimate outcome rather than a
+half-finished state. A per-album cascade would interleave three different rate
 limits in one loop for no benefit.
 
 Sources implement a small interface so tiers are pluggable and individually
@@ -166,12 +207,12 @@ type Result struct { URL, Kind string; Score float64 }
 `Kind` is `album` or `track`. A `Result` is accepted only when `Score` clears the
 threshold; otherwise the tier reports a miss and the next tier gets a turn.
 
-**Query normalization**, measured to matter — it moved the Bandcamp sample from
-47% to 53%:
+**Query normalization.** Its measured effect is smaller than first thought (see
+above), but it is cheap and clearly correct:
 
 - Take only the first artist from Spotify's comma-joined artist strings
-  ("Cavedoll, Tim Phillips" → "Cavedoll"). This rescued two of the sampled
-  misses on its own.
+  ("Cavedoll, Tim Phillips" → "Cavedoll"). Rescued two misses in the first
+  sample; the effect did not persist as a measurable lift in the larger one.
 - Strip parenthetical album suffixes ("Crystals (feat. …)" → "Crystals") and
   edition markers ("Deluxe Edition", "- Remaster").
 
@@ -180,12 +221,14 @@ require a threshold before accepting. This needs `sim` and `norm`, currently
 unexported in `internal/spotifyenrich/score.go`. Extract them into a shared
 `internal/match` package and have `spotifyenrich` consume it — a targeted
 refactor of code this feature genuinely depends on, not opportunistic cleanup.
-Reuse `DefaultThreshold` (0.8) as the starting value; it is tunable.
+Reuse `DefaultThreshold` (0.8) as the starting value. The measured run supports
+it: accepted matches scored 1.00 and rejected ones scored 0.62 or below, so 0.8
+sits in a wide gap rather than on a cliff edge.
 
 **Rate limiting is per source**, not one global `--delay`: Bandcamp self-throttled
-to ~1/s out of politeness, MusicBrainz 1/s as required, iTunes ~20/min, Discogs
-25/min (60 with a token). A single delay flag cannot express this, so each source
-declares its own limiter and `--delay` becomes an optional floor applied on top.
+to ~1/s out of politeness, iTunes ~20/min, Discogs 25/min (60 with a token). A
+single delay flag cannot express this, so each source declares its own limiter and
+`--delay` becomes an optional floor applied on top.
 
 Results cache in a new `purchase_cache` table in `rcache`, mirroring `art_cache`
 (`internal/rcache/art.go`): URL, `source`, `score`, `checked_at`, and negative
@@ -296,12 +339,12 @@ dismissal is deliberately out of scope for v1.
 
 byom-sync:
 
-- Table tests per source over recorded JSON fixtures: Bandcamp autocomplete
-  (hit, clean zero-result miss, track-filter form), MusicBrainz relation
-  filtering and edition picking including the multi-release case where only one
-  edition carries a link, iTunes including the *Piano Is Evil* wrong-album
-  response, Discogs search.
-- Confidence-gate tests proving the iTunes wrong-album case is rejected.
+- Table tests per source over recorded JSON fixtures: Bandcamp (hit, clean
+  zero-result miss, track-filter form), iTunes including the *Piano Is Evil*
+  wrong-album response, Discogs search.
+- Confidence-gate tests using the real rejections from the measured run — Ride's
+  *Peace Sign* against "Classical Music for Zodiac Signs" (0.37), Rob Zombie
+  against "The Sinister Urge" (0.62) — proving each is rejected at 0.8.
 - Normalization tests for comma-joined artists and parenthetical album suffixes,
   using the real strings from the sampled misses.
 - Cascade tests: tier order, that a below-threshold result falls through, and
@@ -328,25 +371,39 @@ byom-player:
 
 ## Cost
 
-Cold fill across the hub, tier by tier, each throttled to its own limit:
+Cold fill across the hub, tier by tier, each throttled to its own limit, using the
+measured hit rates:
 
-- Tier 1 Bandcamp: 7,165 albums at ~1/s ≈ **2 hours**, resolving ~53%.
-- Tier 2 MusicBrainz: ~3,400 remaining at up to 4 requests, 1/s ≈ up to 3.7 hours.
-- Tiers 3–4 iTunes and Discogs: whatever survives, at 20–25/min.
+- Tier 1 Bandcamp: 7,165 albums at ~1/s ≈ **2 hours**, resolving ~47% (3,400).
+- Tier 2 iTunes: ~3,800 remaining at ~20/min ≈ **3.2 hours**, resolving ~65%.
+- Tier 3 Discogs: ~1,300 remaining at 25/min ≈ **50 minutes** (~20 with a token).
 
-Worst case is most of a day, but it is incremental, resumable, and stopping after
-tier 1 is a perfectly good outcome — that single pass is both the cheapest and
-the highest-yield. `--limit` chunks any tier.
+Roughly **6 hours** total for ~85% coverage, down from the most-of-a-day the
+MusicBrainz-first design implied. Incremental, resumable, and `--limit` chunks any
+tier. Stopping after tier 1 remains reasonable: it is the cheapest pass and yields
+the links most worth having.
 
 ## Open questions
 
-- Is 0.8 the right confidence threshold for purchase sources? Inherited from
-  `spotifyenrich`, never tuned against these responses.
-- MusicBrainz candidate strategy: release search scored by artist+title, or
-  release-group first then browse its releases? Worth a spike before building
-  tier 2.
-- Is the 3-lookup cap on MusicBrainz editions right? A cost bound, not measured
-  against hit rate.
-- Tiers 3–4 are specified from single probes. Their real hit rate on the hub's
-  Bandcamp-and-MusicBrainz misses is unmeasured, and may not justify building
-  them — worth sampling before committing, the way tier 1 was.
+- iTunes query construction is the biggest remaining lever. Two of the three
+  gate rejections were real albums Discogs found, so the 65% likely understates
+  it. Try `attribute=albumTerm` or separate artist/album terms and re-measure.
+- Is Discogs worth building at all? It contributed 2 unique albums out of 60
+  (3 percentage points). Defensible to ship tiers 1–2 and stop.
+- Threshold 0.8 is supported by a bimodal score distribution on one 60-album
+  sample. Worth re-checking if iTunes query construction changes.
+- The 60-album sample is a single draw. Bandcamp measured 47% on both a 30-album
+  and a 60-album sample, which is reassuring, but tiers 2–3 have one measurement
+  each.
+
+## Superseded
+
+Recorded because the reasoning is worth not repeating:
+
+- **MusicBrainz as tier 1**, then as tier 2. Dropped after measuring 3% and zero
+  unique contribution. The mechanism worked; the data wasn't there.
+- **An album-keyed sidecar** for `purchase_url`. Dropped after measuring a
+  duplication factor of 1.93 rather than the ~10x assumed.
+- **Odesli.** Rejected on no Bandcamp coverage and a 10 req/min ceiling.
+- **Bandcamp cover art** in this feature, including capturing the id. Split to
+  byom-sync#54 after measuring that only 0.3% of tracks lack art.
