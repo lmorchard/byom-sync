@@ -135,6 +135,21 @@ open question about candidate strategy.
 and MusicBrainz both missed: **20 hits, 65%**, one request each, every one
 carrying a real price.
 
+**On DRM:** iTunes Store music *purchases* have been DRM-free since 2009 —
+"iTunes Plus", 256kbps AAC, no usage restrictions. Apple Music *streaming* is
+DRM-protected; a bought download is not. So there is no DRM argument for
+demoting this tier.
+
+There is, however, a real link-quality problem hiding behind that distinction.
+`collectionViewUrl` points at `music.apple.com`, the Apple Music surface, where
+the foregrounded action is "listen" rather than "buy". Two mitigations:
+
+- **Require `collectionPrice > 0`** before accepting an iTunes result, so a row
+  only appears when the album is genuinely purchasable rather than stream-only.
+  All 20 measured hits carried a price (0.99–9.99), so this costs nothing.
+- Pair every row with the DRM-free store search links below, so the reader always
+  has a route that is unambiguously a purchase.
+
 It is also the reason the confidence gate exists. An early probe for
 "amanda palmer theatre is evil" returned ***Piano Is Evil*** — a real but
 different album, with no signal it was a poor match. In the measured run the gate
@@ -155,8 +170,30 @@ per minute; 60 with a token. On the same 31-album residue it scored 13 hits
 (42%), but 11 overlapped iTunes — **its unique contribution is 2 albums**, both
 of them cases where iTunes' search failed to surface a record it probably has.
 
-Kept as the last tier because it is one request, it covers physical media the
-others don't, and those 2 albums are 6% of the residue. Reasonable to defer.
+Kept as the last tier because it is one request and those 2 albums are 6% of the
+residue. Worth being clear about what a Discogs link *is*, though: a marketplace
+listing for secondhand physical media. It does not fill a gap in a digital
+collection unless the record gets ripped, and a secondhand sale pays the artist
+nothing. That makes it a genuine last resort rather than a preference-driven
+alternative to a download. Reasonable to defer entirely.
+
+### Secondary links: DRM-free store searches
+
+Resolved links answer "where can I buy this exact record". They do not express a
+preference about *who to buy it from*. Every shopping-list row therefore also
+carries a small set of constructed search URLs to DRM-free stores — no API, no
+rate limit, no resolution step, and they never fail to produce a link.
+
+- Bandcamp search (already the fallback when tier 1 misses):
+  `https://bandcamp.com/search?q=<artist>+<album>&item_type=a`
+- Qobuz: `https://www.qobuz.com/us-en/search?q=<artist>+<album>` — **verified**,
+  returns server-rendered results.
+
+Bleep (`https://bleep.com/search?q=`) and Boomkat
+(`https://boomkat.com/products?q[keywords]=`) are plausible additions but could
+**not** be verified from a scripted environment: Bleep renders search
+client-side and Boomkat returns 403 to non-browser traffic. Neither is known to
+be wrong; both need a human to click once before being committed to.
 
 ### Odesli — rejected
 
@@ -205,7 +242,9 @@ type Result struct { URL, Kind string; Score float64 }
 ```
 
 `Kind` is `album` or `track`. A `Result` is accepted only when `Score` clears the
-threshold; otherwise the tier reports a miss and the next tier gets a turn.
+threshold; otherwise the tier reports a miss and the next tier gets a turn. A
+source may impose extra acceptance conditions of its own — iTunes requires
+`collectionPrice > 0` so stream-only records don't surface as purchases.
 
 **Query normalization.** Its measured effect is smaller than first thought (see
 above), but it is cheap and clearly correct:
@@ -313,9 +352,15 @@ name. Tracks with no album group under their artist in a single untitled bucket,
 sorted last within that artist. `unknown` tracks are excluded from the list
 entirely and surfaced separately as a "couldn't check" count.
 
-**Links.** Use the baked-in `purchase_url` when present. Otherwise construct
-`https://bandcamp.com/search?q=<artist>+<album>&item_type=a`. Every row gets a
-working link, so nothing is a dead end.
+**Links.** Each album row carries a primary link and a secondary set:
+
+- *Primary*: the baked-in `purchase_url` when present, labelled by hostname
+  ("Bandcamp", "Apple", "Discogs"). When absent, the Bandcamp search URL.
+- *Secondary*: constructed DRM-free store searches (Bandcamp, Qobuz), rendered
+  compactly on the album header rather than repeated per track, so a row stays
+  readable.
+
+Every row gets a working link either way, so nothing is a dead end.
 
 **Export.** Copy as Markdown, and download as a file.
 
@@ -407,3 +452,9 @@ Recorded because the reasoning is worth not repeating:
 - **Odesli.** Rejected on no Bandcamp coverage and a 10 req/min ceiling.
 - **Bandcamp cover art** in this feature, including capturing the id. Split to
   byom-sync#54 after measuring that only 0.3% of tracks lack art.
+- **Promoting Discogs above iTunes on DRM grounds.** The premise doesn't hold —
+  iTunes purchases are DRM-free (iTunes Plus, since 2009); it's Apple Music
+  streaming that is protected. Reordering would have swapped a DRM-free download
+  for a secondhand vinyl listing on the 11 albums both sources cover, with no
+  coverage gain. The underlying preference is served instead by keeping Bandcamp
+  first, gating iTunes on a real price, and adding DRM-free store search links.

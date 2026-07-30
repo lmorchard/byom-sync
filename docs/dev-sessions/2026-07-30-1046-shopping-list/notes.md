@@ -109,6 +109,31 @@ Worth noting against our own interest: two of those three rejections are real
 albums iTunes probably stocks, and Discogs found both. The gate did its job; the
 query construction is what failed. That is the biggest remaining lever.
 
+## A preference that turned on a factual correction
+
+Les raised disliking that iTunes sells DRM'd music, and asked whether privileging
+Discogs would help. Checking the premise was the useful move: iTunes Store
+purchases have been DRM-free since 2009 (iTunes Plus, 256kbps AAC). Apple Music
+*streaming* is protected; a bought download isn't. The confusion is very
+reasonable, and it turned out to point at something real anyway — our
+`collectionViewUrl` lands on `music.apple.com`, where the foregrounded action is
+"listen", not "buy". So the link was bad even though the file wouldn't be.
+
+Privileging Discogs would also not have served the underlying goal. Discogs sells
+secondhand physical media: it doesn't fill a digital gap unless the record gets
+ripped, and the artist sees nothing. Coverage wouldn't move either — 11 of its 13
+hits overlap iTunes, so it would have swapped a DRM-free download for a vinyl
+listing on exactly those.
+
+What actually serves the preference: Bandcamp stays first (artist-friendly *and*
+DRM-free), iTunes gets a `collectionPrice > 0` gate, and every row gains
+constructed DRM-free store search links.
+
+The general shape is the same as the MusicBrainz reversal — check the premise
+before redesigning around it — but inverted. There the mechanism worked and the
+data was missing; here the concern was well-founded in spirit and wrong in fact,
+and acting on it literally would have made the feature worse.
+
 ## Open questions for implementation
 
 - iTunes query construction — `attribute=albumTerm` or separate artist/album
@@ -116,6 +141,10 @@ query construction is what failed. That is the biggest remaining lever.
 - Is Discogs worth building? 2 unique albums out of 60 is 3 percentage points.
   Shipping tiers 1–2 and stopping is defensible.
 - Tiers 2 and 3 have one measurement each. Bandcamp has two agreeing samples.
+- Do the Bleep and Boomkat search URL patterns work? Three approaches failed to
+  verify them (curl, Playwright — browser wouldn't launch, WebFetch): Bleep
+  renders client-side, Boomkat 403s bot traffic. Qobuz verified fine. Needs one
+  human click each.
 
 ## Next
 
