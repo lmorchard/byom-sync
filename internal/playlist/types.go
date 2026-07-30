@@ -22,6 +22,11 @@ type Playlist struct {
 	// `resolve art --download`); Image stays as the source URL. Mirrors
 	// Track.ImageFile.
 	ImageFile string `yaml:"image_file,omitempty"`
+	// Featured promotes this playlist into the site's Featured list (the top of
+	// the index page and of the sidebar nav). It is additive: a featured
+	// playlist also keeps its normal position in the year groups and nav tree.
+	// Presentation only — exporters ignore it.
+	Featured bool `yaml:"featured,omitempty"`
 	// DateImported is when byom-sync first saw this playlist (its original
 	// "first seen" time). Spotify's API exposes no true playlist creation date.
 	DateImported time.Time `yaml:"date_imported"`

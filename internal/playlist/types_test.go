@@ -225,3 +225,40 @@ func TestTrack_ImageFileRoundTrip(t *testing.T) {
 		t.Errorf("bare track should omit image_file:\n%s", bare)
 	}
 }
+
+func TestPlaylist_FeaturedYAML(t *testing.T) {
+	// Featured round-trips through YAML.
+	var p Playlist
+	if err := yaml.Unmarshal([]byte("title: T\nfeatured: true\ntracks: []\n"), &p); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !p.Featured {
+		t.Error("featured: true did not unmarshal to Featured == true")
+	}
+
+	// An absent key means not featured (the common case for every existing file).
+	var plain Playlist
+	if err := yaml.Unmarshal([]byte("title: T\ntracks: []\n"), &plain); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if plain.Featured {
+		t.Error("absent featured key should leave Featured == false")
+	}
+
+	// omitempty keeps the key out of the files that don't use it.
+	data, err := yaml.Marshal(plain)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(data), "featured") {
+		t.Errorf("unfeatured playlist should not serialize a featured key:\n%s", data)
+	}
+
+	data, err = yaml.Marshal(Playlist{Title: "T", Featured: true})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(data), "featured: true") {
+		t.Errorf("featured playlist should serialize featured: true:\n%s", data)
+	}
+}
