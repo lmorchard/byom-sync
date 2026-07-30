@@ -97,8 +97,12 @@ the cover is a **local** file:
 - `WriteFeed` already receives `outDir`, and both `GenerateMosaics` and
   `CopyArt` run before it in `Build`, so a local cover is on disk at
   `filepath.Join(outDir, ImageFile)` and can be `os.Stat`-ed for its size.
-- MIME type comes from `mime.TypeByExtension`. If that returns empty, the
-  enclosure is skipped rather than guessed.
+- MIME type comes from an explicit extension → type table for the image formats
+  the art store produces (`.jpg`, `.jpeg`, `.png`, `.webp`, `.gif`, `.avif`).
+  Anything else is skipped rather than guessed. Not `mime.TypeByExtension`: it
+  consults system files, so its answers differ per machine, and it reports
+  `application/octet-stream` for non-images — which is not a thing to advertise
+  as a cover.
 - For a remote-only cover the enclosure is skipped. Determining its length would
   mean an HTTP HEAD, and the site build is otherwise entirely offline. The body
   `<img>` still displays the cover in that case.
