@@ -39,7 +39,7 @@ success.
 
 Reachability is low but real: go-yaml rejects raw control bytes in scalars, but a
 double-quoted escape (`"a\x0cb"`, `\v`, `\e`) decodes fine, and an importer
-round-tripping `` out of provider JSON carries it end to end.
+round-tripping a `\u000c` out of provider JSON carries it end to end.
 
 Fixed with `stripInvalidXML` applied once at `itemHTML`'s return, which covers
 every interpolated field at a stroke.
