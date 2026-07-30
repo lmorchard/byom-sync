@@ -68,10 +68,13 @@ func (d *DB) PutPurchase(key string, e PurchaseEntry) error {
 
 // ClearPurchaseSource deletes every row belonging to one tier, so it can be
 // re-run without discarding the other tiers' work. Keys are "<source>\t<album>".
+// Escapes all SQL LIKE wildcards (backslash, %, _) in the source name so a source
+// containing those characters matches exactly, never as wildcards.
 func (d *DB) ClearPurchaseSource(source string) (int64, error) {
+	esc := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(source)
 	res, err := d.db.Exec(
-		`DELETE FROM purchase_cache WHERE key LIKE ?`,
-		strings.ReplaceAll(source, "%", `\%`)+"\t%",
+		`DELETE FROM purchase_cache WHERE key LIKE ? ESCAPE '\'`,
+		esc+"\t%",
 	)
 	if err != nil {
 		return 0, err

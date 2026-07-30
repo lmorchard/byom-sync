@@ -115,3 +115,65 @@ func TestClearMissesOnlySparesPurchaseHits(t *testing.T) {
 		t.Error("negative row should be cleared")
 	}
 }
+
+// Test that source names containing % and _ are escaped properly, so they match
+// exactly and do not act as SQL LIKE wildcards.
+func TestClearPurchaseSourceWithWildcards(t *testing.T) {
+	db := openTestDB(t)
+	now := time.Now()
+
+	// Store rows under a source with both % and _ in the name, plus a plain neighbour
+	_ = db.PutPurchase("we%ird_source\ta", PurchaseEntry{URL: "u1", Source: "we%ird_source", CheckedAt: now})
+	_ = db.PutPurchase("plain_neighbour\ta", PurchaseEntry{URL: "u2", Source: "plain_neighbour", CheckedAt: now})
+
+	// Clear the source with wildcards: should delete exactly 1 row
+	n, err := db.ClearPurchaseSource("we%ird_source")
+	if err != nil {
+		t.Fatalf("ClearPurchaseSource: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("deleted %d rows, want 1", n)
+	}
+
+	// Verify the wildcard-source row is gone
+	if _, ok := db.GetPurchase("we%ird_source\ta"); ok {
+		t.Error("we%ird_source row should be deleted")
+	}
+
+	// Verify the plain neighbour row survives
+	if _, ok := db.GetPurchase("plain_neighbour\ta"); !ok {
+		t.Error("plain_neighbour row should survive")
+	}
+}
+
+// Test that a source name containing % does not act as a wildcard, matching
+// other sources. Clearing a source with embedded % should not match other sources.
+func TestClearPurchaseSourcePercentNotWildcard(t *testing.T) {
+	db := openTestDB(t)
+	now := time.Now()
+
+	sourceWithPercent := "a%b"
+
+	// Store rows under "ab" and "a%b"
+	_ = db.PutPurchase("ab\ta", PurchaseEntry{URL: "u1", Source: "ab", CheckedAt: now})
+	_ = db.PutPurchase(sourceWithPercent+"\ta", PurchaseEntry{URL: "u2", Source: sourceWithPercent, CheckedAt: now})
+
+	// Clear the source with %: should delete exactly 1 row (the literal "a%b", not "ab")
+	n, err := db.ClearPurchaseSource(sourceWithPercent)
+	if err != nil {
+		t.Fatalf("ClearPurchaseSource: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("deleted %d rows, want 1", n)
+	}
+
+	// Verify "ab" survives (% was not treated as a wildcard)
+	if _, ok := db.GetPurchase("ab\ta"); !ok {
+		t.Error("ab row should survive")
+	}
+
+	// Verify the row with % in source is gone
+	if _, ok := db.GetPurchase(sourceWithPercent + "\ta"); ok {
+		t.Error("row with percent in source should be deleted")
+	}
+}
