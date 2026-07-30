@@ -72,6 +72,15 @@ YouTube resolution cache in `internal/rcache/` — an index, not a source of tru
   it keeps its normal position in the year groups and nav tree as well.
   `site-index.json` is an object — `{"featured": [...], "children": [...]}` —
   with the featured list pre-sorted server-side.
+  The RSS feed (`internal/site/feedbody.go`) gives each item a rich HTML body —
+  cover art, playlist prose, a meta line, and the first `site.feed_track_limit`
+  tracks (default 20) as YouTube links, falling back to an `https://`
+  `spotify_url`; a track with neither still appears, unlinked — written to both
+  `<description>` and `<content:encoded>` because many readers render only the
+  former. Track thumbnails and the per-item `<enclosure>` use locally stored art
+  only: an enclosure needs a byte length, which would otherwise mean a network
+  request during an offline build. The feed carries the newest
+  `site.feed_item_limit` playlists (default 25).
 
 ## Commands (Makefile-first)
 

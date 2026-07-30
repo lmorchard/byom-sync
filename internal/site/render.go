@@ -21,6 +21,12 @@ type SiteMeta struct {
 	YouTubeSearchEndpoint string
 	SpotifyClientID       string
 	Pages                 []PageLink
+	// FeedTrackLimit caps how many tracks each RSS item lists. A value > 0
+	// truncates and adds an "…and N more" link; <= 0 lists every track.
+	FeedTrackLimit int
+	// FeedItemLimit caps how many playlists the RSS feed carries, newest first.
+	// A value > 0 truncates; <= 0 includes every playlist.
+	FeedItemLimit int
 }
 
 // Crumb is one breadcrumb link (Href empty → plain text, i.e. current page).
