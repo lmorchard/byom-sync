@@ -66,7 +66,12 @@ YouTube resolution cache in `internal/rcache/` — an index, not a source of tru
   output and references downloaded images as `base_url + image_file` in each
   `playlist.jspf.json` (via the exporter's `art_base` option) and the OpenGraph
   image, serving downloaded art from the site to survive source-URL rot; tracks
-  without a local cached copy retain their source URLs.
+  without a local cached copy retain their source URLs. A playlist with
+  `featured: true` is additionally promoted into a flat `Featured` list at the top
+  of the landing page and of the sidebar nav (`featuredOf` walks the whole tree);
+  it keeps its normal position in the year groups and nav tree as well.
+  `site-index.json` is an object — `{"featured": [...], "children": [...]}` —
+  with the featured list pre-sorted server-side.
 
 ## Commands (Makefile-first)
 
