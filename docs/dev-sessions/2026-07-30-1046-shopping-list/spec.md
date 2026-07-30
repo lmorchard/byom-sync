@@ -189,11 +189,12 @@ rate limit, no resolution step, and they never fail to produce a link.
 - Qobuz: `https://www.qobuz.com/us-en/search?q=<artist>+<album>` — **verified**,
   returns server-rendered results.
 
-Bleep (`https://bleep.com/search?q=`) and Boomkat
-(`https://boomkat.com/products?q[keywords]=`) are plausible additions but could
-**not** be verified from a scripted environment: Bleep renders search
-client-side and Boomkat returns 403 to non-browser traffic. Neither is known to
-be wrong; both need a human to click once before being committed to.
+Two verified links is the whole set. Bleep (`https://bleep.com/search?q=`) and
+Boomkat (`https://boomkat.com/products?q[keywords]=`) were tried and **do not
+work** — both patterns were checked in a real browser and returned no results.
+Their real search URL formats are something else and were not chased down; two
+DRM-free searches per row is enough, and more would clutter the album header for
+diminishing benefit. Recorded here so the same guesses don't get re-derived.
 
 ### Odesli — rejected
 

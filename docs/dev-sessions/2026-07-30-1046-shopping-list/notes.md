@@ -141,10 +141,12 @@ and acting on it literally would have made the feature worse.
 - Is Discogs worth building? 2 unique albums out of 60 is 3 percentage points.
   Shipping tiers 1–2 and stopping is defensible.
 - Tiers 2 and 3 have one measurement each. Bandcamp has two agreeing samples.
-- Do the Bleep and Boomkat search URL patterns work? Three approaches failed to
-  verify them (curl, Playwright — browser wouldn't launch, WebFetch): Bleep
-  renders client-side, Boomkat 403s bot traffic. Qobuz verified fine. Needs one
-  human click each.
+- Bleep and Boomkat search URLs: guessed, unverifiable by script (curl,
+  Playwright, WebFetch all failed for different reasons), then checked by Les in
+  a browser and confirmed **wrong**. Dropped rather than chased. Qobuz and
+  Bandcamp are verified and sufficient. The lesson is small but real: when three
+  automated approaches can't verify something, that's the signal to hand it to
+  the human with a browser rather than to keep guessing at patterns.
 
 ## Next
 
