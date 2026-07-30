@@ -36,9 +36,13 @@ const minContainLen = 5
 // Sim is a 0..1 similarity that rewards the shorter of the two strings matching
 // a contiguous run of the longer one — a "partial ratio". This keeps loosely
 // authored strings scoring high against fuller catalog strings ("come together"
-// vs "come together remastered 2019") while wrong matches stay low. Two empty
-// strings are identical (1.0); one empty and one not is 0.0. Inputs are expected
-// already normalized (see Norm).
+// vs "come together remastered 2019"; "beatles" vs "the beatles") while wrong
+// matches stay low. Two empty strings are identical (1.0); one empty and one not
+// is 0.0. Inputs are expected already normalized (see Norm).
+//
+// Containment only kicks in once the shorter (pattern) string reaches
+// minContainLen runes; shorter patterns use a conservative symmetric ratio
+// instead (see minContainLen).
 func Sim(a, b string) float64 {
 	if a == b {
 		return 1.0
@@ -51,9 +55,13 @@ func Sim(a, b string) float64 {
 		ra, rb = rb, ra // ra is the shorter string — the pattern
 	}
 	if len(ra) < minContainLen {
+		// Pattern too short for containment to be meaningful; require the
+		// whole strings to be close instead of just a substring match.
 		d := Levenshtein(ra, rb)
 		return 1.0 - float64(d)/float64(len(rb))
 	}
+	// Best edit-ratio of the pattern against any equal-length window of the
+	// longer string. An exact substring yields 1.0.
 	best := 0.0
 	for i := 0; i+len(ra) <= len(rb); i++ {
 		d := Levenshtein(ra, rb[i:i+len(ra)])
