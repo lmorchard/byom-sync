@@ -2,9 +2,12 @@ package site
 
 import (
 	"html"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
+	"github.com/gorilla/feeds"
 	"github.com/lmorchard/byom-sync/internal/playlist"
 )
 
@@ -100,4 +103,63 @@ func itemHTML(n *Node, site SiteMeta) string {
 			`">…and ` + strconv.Itoa(rest) + ` more →</a></p>`)
 	}
 	return b.String()
+}
+
+// imageTypes maps the cover-art extensions the art store produces to their MIME
+// types. This is an explicit table rather than a call to mime.TypeByExtension
+// because that function consults system files (e.g. /etc/apache2/mime.types on
+// macOS), so its answers vary by machine — and it will happily report
+// application/octet-stream for a non-image, which is not something to advertise
+// as a cover.
+var imageTypes = map[string]string{
+	".jpg":  "image/jpeg",
+	".jpeg": "image/jpeg",
+	".png":  "image/png",
+	".webp": "image/webp",
+	".gif":  "image/gif",
+	".avif": "image/avif",
+}
+
+// localCoverPath returns the site-relative path of the playlist's cover when a
+// downloaded local copy exists. It mirrors coverHref's precedence — playlist
+// hero first, then the first track with local art — but ignores remote URLs.
+func localCoverPath(p *playlist.Playlist) string {
+	if p.ImageFile != "" {
+		return strings.TrimLeft(p.ImageFile, "/")
+	}
+	for _, t := range p.Tracks {
+		if t.ImageFile != "" {
+			return strings.TrimLeft(t.ImageFile, "/")
+		}
+	}
+	return ""
+}
+
+// coverEnclosure returns an RSS enclosure for the playlist's cover, or nil when
+// one cannot be produced honestly.
+//
+// gorilla/feeds only emits an enclosure when both Type and Length are set, and
+// Length is a byte count. That is knowable for a local file — GenerateMosaics and
+// CopyArt both run before WriteFeed, so the file is already in outDir — but not
+// for a remote URL without a network request, and the site build stays offline.
+// A remote-only cover therefore gets no enclosure; the body's <img> still shows
+// it.
+func coverEnclosure(p *playlist.Playlist, site SiteMeta, outDir string) *feeds.Enclosure {
+	rel := localCoverPath(p)
+	if rel == "" {
+		return nil
+	}
+	ctype, ok := imageTypes[strings.ToLower(filepath.Ext(rel))]
+	if !ok {
+		return nil
+	}
+	fi, err := os.Stat(filepath.Join(outDir, filepath.FromSlash(rel)))
+	if err != nil || fi.Size() == 0 {
+		return nil
+	}
+	return &feeds.Enclosure{
+		Url:    strings.TrimRight(site.BaseURL, "/") + "/" + rel,
+		Type:   ctype,
+		Length: strconv.FormatInt(fi.Size(), 10),
+	}
 }

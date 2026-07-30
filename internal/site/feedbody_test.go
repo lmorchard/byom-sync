@@ -1,6 +1,9 @@
 package site
 
 import (
+	"bytes"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -227,5 +230,78 @@ func TestItemHTMLOmitsAbsentPieces(t *testing.T) {
 	}
 	if strings.Contains(body, "<ol>") {
 		t.Errorf("no tracks should mean no list: %s", body)
+	}
+}
+
+// writeArt creates a file of n bytes at outDir/rel and returns rel.
+func writeArt(t *testing.T, outDir, rel string, n int) string {
+	t.Helper()
+	full := filepath.Join(outDir, filepath.FromSlash(rel))
+	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(full, bytes.Repeat([]byte{0x7f}, n), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return rel
+}
+
+func TestCoverEnclosureLocalFile(t *testing.T) {
+	out := t.TempDir()
+	rel := writeArt(t, out, "art/ab/cover.jpg", 1234)
+
+	enc := coverEnclosure(&playlist.Playlist{Title: "Mix", ImageFile: rel}, testSite(), out)
+	if enc == nil {
+		t.Fatal("expected an enclosure for a local cover file")
+	}
+	if enc.Url != "https://mix.test/art/ab/cover.jpg" {
+		t.Errorf("Url = %q", enc.Url)
+	}
+	if enc.Type != "image/jpeg" {
+		t.Errorf("Type = %q, want image/jpeg", enc.Type)
+	}
+	if enc.Length != "1234" {
+		t.Errorf("Length = %q, want \"1234\"", enc.Length)
+	}
+}
+
+func TestCoverEnclosureFallsBackToTrackArt(t *testing.T) {
+	out := t.TempDir()
+	rel := writeArt(t, out, "art/cd/track.png", 99)
+
+	enc := coverEnclosure(&playlist.Playlist{
+		Title:  "Mix",
+		Tracks: []playlist.Track{{Title: "T"}, {Title: "U", ImageFile: rel}},
+	}, testSite(), out)
+	if enc == nil {
+		t.Fatal("expected an enclosure from the first track with local art")
+	}
+	if enc.Type != "image/png" {
+		t.Errorf("Type = %q, want image/png", enc.Type)
+	}
+}
+
+func TestCoverEnclosureSkipped(t *testing.T) {
+	out := t.TempDir()
+	missing := "art/never/written.jpg"
+	unknownExt := writeArt(t, out, "art/ef/cover.bin", 10)
+	empty := writeArt(t, out, "art/gh/empty.jpg", 0)
+
+	tests := []struct {
+		name string
+		p    *playlist.Playlist
+	}{
+		{"remote-only cover", &playlist.Playlist{Image: "https://i.scdn.co/image/xyz"}},
+		{"no art at all", &playlist.Playlist{Title: "Bare"}},
+		{"file not on disk", &playlist.Playlist{ImageFile: missing}},
+		{"unknown extension", &playlist.Playlist{ImageFile: unknownExt}},
+		{"zero-length file", &playlist.Playlist{ImageFile: empty}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if enc := coverEnclosure(tc.p, testSite(), out); enc != nil {
+				t.Errorf("expected no enclosure, got %+v", enc)
+			}
+		})
 	}
 }
