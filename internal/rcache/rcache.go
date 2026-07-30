@@ -65,6 +65,10 @@ func Open(path string) (*DB, error) {
 		_ = db.Close()
 		return nil, err
 	}
+	if _, err := db.Exec(purchaseSchema); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
 	return &DB{db: db}, nil
 }
 
@@ -153,7 +157,7 @@ func (d *DB) Stats(missCutoff time.Time) (Stats, error) {
 	return s, nil
 }
 
-// Clear deletes cache entries across the resolution, enrichment, and art
+// Clear deletes cache entries across the resolution, enrichment, art, and purchase
 // tables. With missesOnly, only negative entries (empty id) are removed.
 // Returns the total number of rows deleted.
 func (d *DB) Clear(missesOnly bool) (int64, error) {
@@ -184,5 +188,10 @@ func (d *DB) Clear(missesOnly bool) (int64, error) {
 		return total, err
 	}
 	total += n3
+	n4, err := del("purchase_cache", "url")
+	if err != nil {
+		return total, err
+	}
+	total += n4
 	return total, nil
 }
