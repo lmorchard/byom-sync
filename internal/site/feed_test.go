@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -138,5 +139,67 @@ func TestWriteFeedRespectsTrackLimit(t *testing.T) {
 	}
 	if !strings.Contains(s, "and 1 more") {
 		t.Error("feed missing overflow line for the truncated track")
+	}
+}
+
+// The feed carries only the newest FeedItemLimit playlists. A hub can hold
+// hundreds, and each item now embeds a full tracklist twice (description and
+// content:encoded), so an uncapped feed grows without bound.
+func TestWriteFeedCapsItems(t *testing.T) {
+	site := testSite()
+	site.FeedItemLimit = 2
+	mk := func(name string, year int) *Node {
+		return &Node{Name: name, Title: name, Path: name, Playlist: &playlist.Playlist{
+			Title:       name,
+			DateCreated: time.Date(year, 1, 1, 0, 0, 0, 0, time.UTC),
+		}}
+	}
+	// Deliberately not in date order, to prove the cap applies after sorting.
+	root := &Node{IsDir: true, Children: []*Node{
+		mk("Middle", 2022), mk("Oldest", 2020), mk("Newest", 2024),
+	}}
+	out := t.TempDir()
+	if err := WriteFeed(out, site, root); err != nil {
+		t.Fatalf("WriteFeed: %v", err)
+	}
+	xmlBytes, err := os.ReadFile(filepath.Join(out, "feed.xml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(xmlBytes)
+	if got := strings.Count(s, "<item>"); got != 2 {
+		t.Errorf("expected 2 items, got %d", got)
+	}
+	for _, want := range []string{"<title>Newest</title>", "<title>Middle</title>"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("feed missing %q", want)
+		}
+	}
+	if strings.Contains(s, "<title>Oldest</title>") {
+		t.Error("feed kept the oldest playlist past FeedItemLimit")
+	}
+}
+
+func TestWriteFeedItemLimitZeroKeepsAll(t *testing.T) {
+	site := testSite()
+	site.FeedItemLimit = 0
+	var children []*Node
+	for i := range 30 {
+		name := "p" + strconv.Itoa(i)
+		children = append(children, &Node{
+			Name: name, Title: name, Path: name,
+			Playlist: &playlist.Playlist{Title: name},
+		})
+	}
+	out := t.TempDir()
+	if err := WriteFeed(out, site, &Node{IsDir: true, Children: children}); err != nil {
+		t.Fatalf("WriteFeed: %v", err)
+	}
+	xmlBytes, err := os.ReadFile(filepath.Join(out, "feed.xml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Count(string(xmlBytes), "<item>"); got != 30 {
+		t.Errorf("FeedItemLimit 0 should keep all 30 items, got %d", got)
 	}
 }

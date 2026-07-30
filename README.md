@@ -255,6 +255,7 @@ site:
   provider: youtube                        # provider <byom-player> boots with
   providers: [youtube, spotify]            # optional: offered in the player's picker
   feed_track_limit: 20                     # tracks listed per RSS item (<=0 for all)
+  feed_item_limit: 25                      # newest playlists in the feed (<=0 for all)
   # youtube_search_endpoint: https://...   # host attributes baked into each page
   # spotify_client_id: "..."
   # player_src: https://cdn.jsdelivr.net/npm/@lmorchard/byom-player@1.0.2/dist/byom-player.js

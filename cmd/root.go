@@ -89,6 +89,7 @@ func initConfig() {
 	viper.SetDefault("site.player_src", "https://cdn.jsdelivr.net/npm/@lmorchard/byom-player@1.0.2/dist/byom-player.js")
 	viper.SetDefault("site.pages_dir", "./pages")
 	viper.SetDefault("site.feed_track_limit", 20)
+	viper.SetDefault("site.feed_item_limit", 25)
 
 	// Read in environment variables that match
 	viper.AutomaticEnv()
