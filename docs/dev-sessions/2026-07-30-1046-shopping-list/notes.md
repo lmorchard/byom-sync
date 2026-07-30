@@ -162,9 +162,19 @@ one), and a fourth by checking a premise (the DRM question). The measurements
 were cheap; the confidence was not calibrated.
 
 ## Open questions for implementation
-- Is Discogs worth building? 2 unique albums out of 60 is 3 percentage points,
-  but it is now the only route to them. A judgement call, not a technical
-  question.
+- (Resolved) Discogs is in scope. Before speccing it, one more measurement asked
+  whether its contribution survives requiring `num_for_sale > 0` — a link to a
+  release nobody is selling is worse than no link, and it could have wiped out
+  the 2 unique albums. It didn't: 12/31 survive, both unique albums included
+  (Sara Lov 7 copies from $5.06, Rob Zombie 36 from $19.99).
+
+  That measurement also changed the design. Discogs search returns no
+  `num_for_sale` and a single `"Artist - Album"` string that breaks on artists
+  containing " - ", so a second request to the release lookup was already
+  tempting; it turns out to pay for itself twice, supplying authoritative
+  `artists[]`/`title` that rescored 1.00 on all 12 survivors *and* the
+  availability signal. Measured cost is 1.4 requests per album, not 2, because
+  the lookup only fires for candidates that pass the first gate.
 - Tiers 2 and 3 have one measurement each. Bandcamp has two agreeing samples.
 - Bleep and Boomkat search URLs: guessed, unverifiable by script (curl,
   Playwright, WebFetch all failed for different reasons), then checked by Les in

@@ -54,7 +54,7 @@ measured, not quoted from documentation.
 | --- | --- | --- | --- | --- |
 | Bandcamp (undocumented) | 1 | unpublished | 47% of all albums | Tier 1 |
 | iTunes Search | 1 | ~20/min | 65% of tier-1 misses | Tier 2 |
-| Discogs | 1 | 25/min unauth, 60 auth | 42% of tier-1 misses, +2 unique | Tier 3 |
+| Discogs | 1.4 | 25/min unauth, 60 auth | 39% of tier-1 misses, +2 unique | Tier 3 |
 | MusicBrainz `url-rels` | 2+ | ~1/s | **3%, zero unique** | Dropped |
 | Odesli / song.link | 1 | 10/min | not reached — no Bandcamp coverage | Rejected |
 
@@ -68,7 +68,7 @@ previous tiers missed, with the confidence gate applied throughout:
 | 1 Bandcamp | 60 | 28 | 47% | 60 |
 | 2 MusicBrainz | 32 | 1 | 3% | 60 |
 | 3 iTunes | 31 | 20 | 65% | 31 |
-| 4 Discogs | 31 | 13 (2 unique) | 42% | 31 |
+| 4 Discogs | 31 | 12 (2 unique) | 39% | 44 |
 
 **Cumulative coverage is 51/60 = 85%, identical with or without MusicBrainz.**
 
@@ -181,20 +181,58 @@ Apple no longer sells it rather than that the query was poor.
 The purchase gate is doing real work here: it is what distinguishes "Apple has
 this to stream" from "Apple will sell you this."
 
-### Discogs — small but genuinely additive
+### Discogs — small, additive, and in scope
 
 Unauthenticated search works and reports its budget in `x-discogs-ratelimit: 25`
-per minute; 60 with a token. On the same 31-album residue it scored 13 hits
-(42%), but 11 overlapped iTunes — **its unique contribution is 2 albums**, both
-of them cases where iTunes' search failed to surface a record it probably has.
+per minute; 60 with a free personal access token. A `User-Agent` is mandatory —
+Discogs rejects default agents.
 
-Kept as the last tier because it is one request and those 2 albums are 6% of the
-residue — and, after the iTunes query experiment came back empty, because Discogs
-is the **only** source that recovers them. Worth being clear about what a Discogs link *is*, though: a marketplace
-listing for secondhand physical media. It does not fill a gap in a digital
-collection unless the record gets ripped, and a secondhand sale pays the artist
-nothing. That makes it a genuine last resort rather than a preference-driven
-alternative to a download. Reasonable to defer entirely.
+Raw search scored 13/31 on the residue, but a raw match is not a purchasable
+record. Re-measured with an availability gate, **12/31**, and critically **both
+albums unique to Discogs survive**:
+
+| Album | Copies for sale | From |
+| --- | --- | --- |
+| Sara Lov — *I Already Love You* | 7 | $5.06 |
+| Rob Zombie — *Hellbilly Deluxe* | 36 | $19.99 |
+
+Only one match dropped (zero copies listed), and iTunes already covers it, so
+cumulative coverage is unchanged at 85%.
+
+**Two-step lookup**, because the search response is insufficient on its own:
+
+1. `GET /database/search?q=<artist> <album>&type=release&per_page=5`. Search
+   results carry no `num_for_sale`, and their `title` is a single
+   `"Artist - Album"` string that breaks when either side contains " - ". Use
+   this only to pick candidates.
+2. `GET` the best candidate's `resource_url`. This returns authoritative
+   `artists[].name` and `title` for scoring, plus `num_for_sale` and
+   `lowest_price`.
+
+**Accept only when the rescore clears the threshold *and* `num_for_sale > 0`.**
+Rescoring on the clean fields returned 1.00 for all 12 survivors, so the second
+request pays for itself twice: it removes the string-splitting fragility and it
+prevents linking to a release nobody is selling.
+
+The second request only fires for candidates that pass the first gate — measured
+at 1.4 requests per album, not 2.
+
+**URL comes from the API**, never constructed: the search result's `uri` field
+(`/release/11662135-Rob-Zombie-Hellbilly-Deluxe`) appended to
+`https://www.discogs.com`. Discogs' own site 403s scripted traffic, so any
+hand-built path would be unverifiable — and this session has already burned two
+invented URL patterns.
+
+**`lowest_price` is deliberately not stored in the hub.** It is genuinely useful
+in the panel (the sampled range was $3.02 to $193.68, and a $193.68 pressing is
+worth knowing about before clicking) but prices move constantly. Writing them
+into version-controlled YAML would churn diffs across thousands of tracks on
+every re-resolve, and a stale price is worse than none.
+
+What a Discogs link *is*, stated plainly: a marketplace listing for secondhand
+physical media. It does not fill a gap in a digital collection unless the record
+gets ripped, and a secondhand sale pays the artist nothing. That is why it is
+last, and why shipping tiers 1–2 and stopping would still be defensible.
 
 ### Secondary links: DRM-free store searches
 
@@ -406,7 +444,9 @@ byom-sync:
 
 - Table tests per source over recorded JSON fixtures: Bandcamp (hit, clean
   zero-result miss, track-filter form), iTunes including the *Piano Is Evil*
-  wrong-album response, Discogs search.
+  wrong-album response and a stream-only record with no `collectionPrice`,
+  Discogs two-step (search → release lookup) including a `num_for_sale: 0`
+  release that must be rejected despite scoring 1.00.
 - Confidence-gate tests using the real rejections from the measured run — Ride's
   *Peace Sign* against "Classical Music for Zodiac Signs" (0.37), Rob Zombie
   against "The Sinister Urge" (0.62) — proving each is rejected at 0.8.
@@ -414,6 +454,8 @@ byom-sync:
   using the real strings from the sampled misses.
 - Cascade tests: tier order, that a below-threshold result falls through, and
   that a tier failing entirely doesn't abort the pass.
+- A Discogs search result whose `title` contains " - " inside the artist or album
+  name, proving the second-request rescore avoids the split-string trap.
 - `purchase_cache` tests mirroring `internal/rcache/art_test.go` — hits, negative
   entries, TTL expiry, per-source clearing.
 - `internal/match` tests move with the extracted `sim` / `norm`; existing
@@ -441,7 +483,8 @@ measured hit rates:
 
 - Tier 1 Bandcamp: 7,165 albums at ~1/s ≈ **2 hours**, resolving ~47% (3,400).
 - Tier 2 iTunes: ~3,800 remaining at ~20/min ≈ **3.2 hours**, resolving ~65%.
-- Tier 3 Discogs: ~1,300 remaining at 25/min ≈ **50 minutes** (~20 with a token).
+- Tier 3 Discogs: ~1,300 remaining at 1.4 requests each ≈ 1,850 requests —
+  **~75 minutes** unauthenticated, **~30** with a free personal access token.
 
 Roughly **6 hours** total for ~85% coverage, down from the most-of-a-day the
 MusicBrainz-first design implied. Incremental, resumable, and `--limit` chunks any
@@ -450,11 +493,8 @@ the links most worth having.
 
 ## Open questions
 
-- Is Discogs worth building? It contributes 2 unique albums out of 60 (3
-  percentage points) — but it is now the only route to them, since the iTunes
-  query experiment failed to recover any. Shipping tiers 1–2 and stopping is
-  still defensible; this is a judgement call about 3 points of coverage, not an
-  open technical question.
+- (Resolved) Discogs is in scope as tier 3. It contributes 2 unique albums out
+  of 60 and is the only route to them; both survive the `num_for_sale` gate.
 - Threshold 0.8 is supported by a bimodal score distribution on one 60-album
   sample. Worth re-checking if iTunes query construction changes.
 - The 60-album sample is a single draw. Bandcamp measured 47% on both a 30-album
