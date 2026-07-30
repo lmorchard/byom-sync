@@ -113,6 +113,18 @@ errcheck findings CI caught).
   by default, positional args override, `--all` = all owned. Catalog-removed
   stubs (empty title+artist) are filtered at fetch. The `convert()` function also
   captures album art into `Track.Image` from `Album.Images`.
+- **Sync must not clobber locally-derived fields.** `Merge` starts from the
+  *remote* playlist (`out := remote`), so anything Spotify doesn't send back is
+  blank unless explicitly carried over. `Merge` copies playlist-level `featured` +
+  hero art, and `adoptLocalFields` copies each surviving track's `youtube_id`,
+  `image_file`, `spotify` opt-out, and `enrich_candidates`; `Image` is the one
+  field where remote wins when non-empty. Without this, a single sync wiped every
+  `resolve` result — on the live hub that was 8292 `youtube_id`s and 8318
+  `image_file`s in one playlist, silently, with a zero exit code. When you add a
+  locally-derived field to `Playlist` or `Track`, add it here too, or sync will
+  quietly delete it. A side effect worth knowing: because the lookup is by
+  `Track.Key()`, duplicate remote entries of the same song (common in
+  scrobble-log playlists) all inherit the one local track's resolved ids.
 - **Dates:** three playlist-level fields. `date_imported` is when byom-sync first
   saw the playlist (Spotify exposes no true creation date); `date_created` and
   `date_updated` are the earliest and latest track `added_at` (all tracks,

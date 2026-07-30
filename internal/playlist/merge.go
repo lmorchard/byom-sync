@@ -18,6 +18,12 @@ const (
 // Metadata (Title, Creator, DateImported, SpotifyID) comes from remote;
 // DateCreated/DateUpdated are recomputed post-merge via RefreshDates.
 //
+// Locally-derived fields survive the merge under both strategies, because Spotify
+// has no equivalent to send back and a fetched copy would otherwise blank them:
+// `featured` and the playlist hero art at the playlist level, and each surviving
+// track's `youtube_id`, `image_file`, `spotify` opt-out, and `enrich_candidates`.
+// See adoptLocalFields.
+//
 //	Archive: union by Track.Key(). Remote tracks are marked SpotifyPresent=true
 //	         with any orphan date cleared. Local tracks absent from the remote are
 //	         kept (never deleted): marked SpotifyPresent=false and, if not already
@@ -28,10 +34,25 @@ const (
 //	         tracks are discarded.
 func Merge(local, remote Playlist, strat Strategy, now time.Time) Playlist {
 	out := remote
+	// Playlist-level presentation is authored locally (or filled by `resolve art
+	// --download`) and never comes back from Spotify.
+	out.Featured = local.Featured
+	out.ImageFile = local.ImageFile
+	if out.Image == "" {
+		out.Image = local.Image
+	}
 	out.Tracks = make([]Track, 0, len(remote.Tracks))
+
+	localByKey := make(map[string]Track, len(local.Tracks))
+	for _, lt := range local.Tracks {
+		localByKey[lt.Key()] = lt
+	}
 
 	remoteKeys := make(map[string]bool, len(remote.Tracks))
 	for _, rt := range remote.Tracks {
+		if lt, ok := localByKey[rt.Key()]; ok {
+			rt = adoptLocalFields(rt, lt)
+		}
 		rt.SyncState = SyncState{SpotifyPresent: true}
 		out.Tracks = append(out.Tracks, rt)
 		remoteKeys[rt.Key()] = true
@@ -53,4 +74,28 @@ func Merge(local, remote Playlist, strat Strategy, now time.Time) Playlist {
 	}
 
 	return out
+}
+
+// adoptLocalFields carries a local track's locally-derived fields onto its
+// freshly-fetched remote counterpart. Spotify owns the descriptive metadata
+// (title, artist, album, ISRC, ids, duration, added_at); everything copied here
+// is produced by the `resolve` commands or authored by hand, has no remote
+// equivalent, and would be silently destroyed on every sync if the remote track
+// simply replaced the local one.
+//
+// Image is the exception: Spotify's album art wins when it sent any, and the
+// local URL is only a fallback for tracks Spotify had no art for (filled by
+// `resolve art` from MusicBrainz/Cover Art Archive). ImageFile is kept either
+// way — it may point at art downloaded for a superseded URL, which is still
+// better than dropping the reference; the next `resolve art --download` refreshes
+// it.
+func adoptLocalFields(remote, local Track) Track {
+	remote.YouTubeID = local.YouTubeID
+	remote.ImageFile = local.ImageFile
+	remote.Spotify = local.Spotify
+	remote.EnrichCandidates = local.EnrichCandidates
+	if remote.Image == "" {
+		remote.Image = local.Image
+	}
+	return remote
 }

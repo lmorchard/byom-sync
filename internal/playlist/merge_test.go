@@ -120,3 +120,113 @@ func TestMerge_ArchiveRevivesOrphanWhenBackInRemote(t *testing.T) {
 		t.Errorf("track duplicated: got %d", len(out.Tracks))
 	}
 }
+
+func TestMerge_PreservesLocallyDerivedTrackFields(t *testing.T) {
+	// A track that is still on the remote playlist carries local work that
+	// Spotify knows nothing about: resolved YouTube ids, downloaded art, the
+	// enrichment opt-out, and pending enrich candidates. The freshly fetched
+	// remote track has none of these, so replacing the local track wholesale
+	// destroys every `resolve` run.
+	no := false
+	local := track("Keep", "A", "ISRC-K")
+	local.YouTubeID = "yt-keep"
+	local.ImageFile = "art/ab/abcdef.jpg"
+	local.Spotify = &no
+	local.EnrichCandidates = []EnrichCandidate{{SpotifyID: "cand-1"}}
+	local.Image = "http://mb/art.jpg" // filled by resolve art, not by Spotify
+
+	remote := track("Keep", "A", "ISRC-K")
+	remote.DurationMS = 12345 // remote metadata should still win
+
+	out := Merge(
+		Playlist{SpotifyID: "PID", Tracks: []Track{local}},
+		Playlist{SpotifyID: "PID", Tracks: []Track{remote}},
+		Archive, testNow,
+	)
+
+	keep, ok := findTrack(out, "Keep")
+	if !ok {
+		t.Fatal("track missing")
+	}
+	if keep.YouTubeID != "yt-keep" {
+		t.Errorf("YouTubeID = %q, want yt-keep (resolve youtube work destroyed)", keep.YouTubeID)
+	}
+	if keep.ImageFile != "art/ab/abcdef.jpg" {
+		t.Errorf("ImageFile = %q, want art/ab/abcdef.jpg (downloaded art reference lost)", keep.ImageFile)
+	}
+	if keep.Spotify == nil || *keep.Spotify {
+		t.Errorf("Spotify opt-out lost: %v", keep.Spotify)
+	}
+	if len(keep.EnrichCandidates) != 1 || keep.EnrichCandidates[0].SpotifyID != "cand-1" {
+		t.Errorf("EnrichCandidates lost: %+v", keep.EnrichCandidates)
+	}
+	// Remote still owns descriptive metadata.
+	if keep.DurationMS != 12345 {
+		t.Errorf("DurationMS = %d, want 12345 from remote", keep.DurationMS)
+	}
+}
+
+func TestMerge_RemoteImageWinsWhenPresent(t *testing.T) {
+	// Spotify's album art is authoritative when it has any; the local URL is
+	// only a fallback for tracks Spotify had no art for.
+	local := track("Keep", "A", "ISRC-K")
+	local.Image = "http://mb/old.jpg"
+	remote := track("Keep", "A", "ISRC-K")
+	remote.Image = "http://spotify/new.jpg"
+
+	out := Merge(
+		Playlist{SpotifyID: "PID", Tracks: []Track{local}},
+		Playlist{SpotifyID: "PID", Tracks: []Track{remote}},
+		Archive, testNow,
+	)
+
+	keep, _ := findTrack(out, "Keep")
+	if keep.Image != "http://spotify/new.jpg" {
+		t.Errorf("Image = %q, want the remote URL", keep.Image)
+	}
+}
+
+func TestMerge_MirrorPreservesLocallyDerivedTrackFields(t *testing.T) {
+	// Mirror drops local-only *tracks*; it should not un-resolve the tracks that
+	// survive.
+	local := track("Keep", "A", "ISRC-K")
+	local.YouTubeID = "yt-keep"
+
+	out := Merge(
+		Playlist{SpotifyID: "PID", Tracks: []Track{local, track("Gone", "B", "ISRC-G")}},
+		Playlist{SpotifyID: "PID", Tracks: []Track{track("Keep", "A", "ISRC-K")}},
+		Mirror, testNow,
+	)
+
+	if len(out.Tracks) != 1 {
+		t.Fatalf("mirror should keep only remote tracks: got %d", len(out.Tracks))
+	}
+	if out.Tracks[0].YouTubeID != "yt-keep" {
+		t.Errorf("mirror lost YouTubeID: %q", out.Tracks[0].YouTubeID)
+	}
+}
+
+func TestMerge_PreservesLocalPresentationFields(t *testing.T) {
+	// Playlist-level presentation is authored locally and has no Spotify
+	// counterpart, so a sync must not clear it.
+	local := Playlist{
+		SpotifyID: "PID", Featured: true,
+		Image: "http://local/hero.jpg", ImageFile: "art/cd/hero.jpg",
+	}
+	remote := Playlist{SpotifyID: "PID", Title: "New Title"}
+
+	out := Merge(local, remote, Archive, testNow)
+
+	if !out.Featured {
+		t.Error("Featured lost — a sync would silently un-feature the playlist")
+	}
+	if out.Image != "http://local/hero.jpg" {
+		t.Errorf("Image = %q, want the local hero URL", out.Image)
+	}
+	if out.ImageFile != "art/cd/hero.jpg" {
+		t.Errorf("ImageFile = %q, want the local hero path", out.ImageFile)
+	}
+	if out.Title != "New Title" {
+		t.Errorf("Title = %q, want remote's", out.Title)
+	}
+}
