@@ -69,8 +69,9 @@ YouTube resolution cache in `internal/rcache/` — an index, not a source of tru
   without a local cached copy retain their source URLs.
   The RSS feed (`internal/site/feedbody.go`) gives each item a rich HTML body —
   cover art, playlist prose, a meta line, and the first `site.feed_track_limit`
-  tracks (default 20) as YouTube links, falling back to `spotify_url` — written to
-  both `<description>` and `<content:encoded>` because many readers render only the
+  tracks (default 20) as YouTube links, falling back to an `https://`
+  `spotify_url`; a track with neither still appears, unlinked — written to both
+  `<description>` and `<content:encoded>` because many readers render only the
   former. Track thumbnails and the per-item `<enclosure>` use locally stored art
   only: an enclosure needs a byte length, which would otherwise mean a network
   request during an offline build.

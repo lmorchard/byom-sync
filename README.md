@@ -236,7 +236,8 @@ byom-sync resolve youtube --no-cache
 Compile the hub into a navigable static site — one page per playlist embedding
 [`<byom-player>`](https://github.com/lmorchard/byom-player), a tree that mirrors
 your hub's subdirectories, a shared nav sidebar, Open Graph metadata, and an RSS
-feed whose items list the opening tracks as links. This is the generator behind sites like `mixtapes.lmorchard.com`.
+feed whose items list the opening tracks as links. This is the generator behind
+sites like `mixtapes.lmorchard.com`.
 
 ```sh
 # Build the site from the hub into ./dist

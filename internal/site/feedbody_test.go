@@ -222,6 +222,25 @@ func TestItemHTMLDecodesEncodedDescription(t *testing.T) {
 	}
 }
 
+// A stray control character in interpolated data (e.g. carried in from a
+// double-quoted YAML escape or a round-tripped provider JSON field) must not
+// survive into itemHTML's output: it goes out inside a CDATA section in
+// <content:encoded>, which encoding/xml passes through verbatim with no
+// character-range check, so one such byte would make the entire feed.xml
+// unparseable rather than just this item.
+func TestItemHTMLStripsControlCharacters(t *testing.T) {
+	body := itemHTML(feedNode(&playlist.Playlist{
+		Title: "Bad",
+		Tracks: []playlist.Track{
+			{Artist: "Bad\x0cArtist", Title: "Title\x0bHere", YouTubeID: "abc123"},
+		},
+	}), testSite())
+
+	if strings.ContainsAny(body, "\x0c\x0b") {
+		t.Errorf("control characters survived into itemHTML output: %q", body)
+	}
+}
+
 func TestItemHTMLOmitsAbsentPieces(t *testing.T) {
 	body := itemHTML(feedNode(&playlist.Playlist{Title: "Bare"}), testSite())
 

@@ -102,7 +102,24 @@ func itemHTML(n *Node, site SiteMeta) string {
 		b.WriteString(`<p><a href="` + html.EscapeString(canonical(site.BaseURL, n.Path)) +
 			`">…and ` + strconv.Itoa(rest) + ` more →</a></p>`)
 	}
-	return b.String()
+	return stripInvalidXML(b.String())
+}
+
+// stripInvalidXML drops code points XML 1.0 forbids. <description> is
+// sanitized by the marshaller, but Content goes out inside a CDATA section,
+// which passes bytes through verbatim — one stray control byte there makes the
+// entire feed unparseable.
+func stripInvalidXML(s string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r == 0x09, r == 0x0A, r == 0x0D,
+			r >= 0x20 && r <= 0xD7FF,
+			r >= 0xE000 && r <= 0xFFFD,
+			r >= 0x10000 && r <= 0x10FFFF:
+			return r
+		}
+		return -1
+	}, s)
 }
 
 // imageTypes maps the cover-art extensions the art store produces to their MIME
@@ -122,7 +139,11 @@ var imageTypes = map[string]string{
 
 // localCoverPath returns the site-relative path of the playlist's cover when a
 // downloaded local copy exists. It mirrors coverHref's precedence — playlist
-// hero first, then the first track with local art — but ignores remote URLs.
+// hero first, then the first track with local art — but skips remote-URL
+// branches rather than treating them as terminal, so it can pick a different
+// image than coverHref does: a playlist with a remote hero and a track with
+// local art gets an enclosure for the track's art while the body's <img>
+// (via coverHref) still shows the remote hero.
 func localCoverPath(p *playlist.Playlist) string {
 	if p.ImageFile != "" {
 		return strings.TrimLeft(p.ImageFile, "/")
