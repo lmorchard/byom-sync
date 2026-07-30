@@ -61,6 +61,7 @@ func runSite(_ *cobra.Command, _ []string) error {
 			Providers:             viper.GetStringSlice("site.providers"),
 			YouTubeSearchEndpoint: viper.GetString("site.youtube_search_endpoint"),
 			SpotifyClientID:       viper.GetString("site.spotify_client_id"),
+			FeedTrackLimit:        viper.GetInt("site.feed_track_limit"),
 		},
 	})
 }

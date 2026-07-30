@@ -12,10 +12,13 @@ import (
 func WriteFeed(outDir string, site SiteMeta, root *Node) error {
 	var items []*feeds.Item
 	err := walkPlaylists(root, func(n *Node) error {
+		body := itemHTML(n, site)
 		items = append(items, &feeds.Item{
 			Title:       n.Title,
 			Link:        &feeds.Link{Href: canonical(site.BaseURL, n.Path)},
-			Description: n.Playlist.Description,
+			Description: body,
+			Content:     body,
+			Enclosure:   coverEnclosure(n.Playlist, site, outDir),
 			Created:     n.Playlist.DateCreated,
 		})
 		return nil
