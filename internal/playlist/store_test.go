@@ -369,3 +369,80 @@ func TestSave_DoesNotClobberNativeFileOnSlugCollision(t *testing.T) {
 		t.Errorf("native file tracks changed: %+v", got.Tracks)
 	}
 }
+
+func TestFindFileByID_FindsPlaylistInSubdirectory(t *testing.T) {
+	// Hubs are organized into subdirectories. A shallow glob of the hub root
+	// finds nothing, so Save concludes the playlist is new and writes a duplicate
+	// at the root instead of updating the file in place.
+	dir := t.TempDir()
+	sub := filepath.Join(dir, "00-conceptual")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveFile(filepath.Join(sub, "nested.yaml"), Playlist{SpotifyID: "PID-SUB", Title: "Nested"}); err != nil {
+		t.Fatal(err)
+	}
+
+	path, ok, err := FindFileByID(dir, "PID-SUB")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if !ok {
+		t.Fatal("did not find a playlist filed in a subdirectory")
+	}
+	if filepath.Base(path) != "nested.yaml" {
+		t.Errorf("path = %q, want the nested file", path)
+	}
+}
+
+func TestSave_UpdatesSubdirectoryFileInPlace(t *testing.T) {
+	// The live-hub failure: syncing a subdirectory-organized hub created 57 new
+	// files at the root, one per playlist, leaving the originals stale.
+	dir := t.TempDir()
+	sub := filepath.Join(dir, "01-covers")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	nested := filepath.Join(sub, "keeper.yaml")
+	if err := SaveFile(nested, Playlist{SpotifyID: "PID-K", Title: "Keeper"}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := Save(dir, Playlist{SpotifyID: "PID-K", Title: "Keeper Renamed"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != nested {
+		t.Errorf("Save wrote %q, want the existing nested file %q", got, nested)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "keeper-renamed.yaml")); err == nil {
+		t.Error("Save created a duplicate at the hub root")
+	}
+	// Exactly one file in the hub, and it carries the new title.
+	paths, err := HubPaths(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(paths) != 1 {
+		t.Errorf("hub has %d files, want 1: %v", len(paths), paths)
+	}
+	p, err := LoadFile(nested)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Title != "Keeper Renamed" {
+		t.Errorf("nested file title = %q, want the updated title", p.Title)
+	}
+}
+
+func TestFindFileByID_MissingDirIsNotAnError(t *testing.T) {
+	// sync calls FindFileByID before anything creates the hub directory, so a
+	// not-yet-existing hub must read as "no playlists", not as a failure.
+	_, ok, err := FindFileByID(filepath.Join(t.TempDir(), "nope"), "PID")
+	if err != nil {
+		t.Errorf("missing dir returned an error: %v", err)
+	}
+	if ok {
+		t.Error("missing dir reported a match")
+	}
+}

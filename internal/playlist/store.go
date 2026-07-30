@@ -178,13 +178,21 @@ func SaveFile(path string, p Playlist) error {
 }
 
 // FindFileByID returns the path of the YAML file in dir whose spotify_id matches
-// spotifyID. ok is false (with a nil error) when no file matches.
+// spotifyID, searching the whole hub recursively via HubPaths — playlists are
+// routinely filed in subdirectories, and a shallow scan of the hub root would
+// report them as absent, making Save write a duplicate there. ok is false (with a
+// nil error) when no file matches.
 func FindFileByID(dir, spotifyID string) (path string, ok bool, err error) {
-	matches, err := filepath.Glob(filepath.Join(dir, "*.yaml"))
+	matches, err := HubPaths(dir)
 	if err != nil {
+		// A hub directory that doesn't exist yet simply holds no playlists. sync
+		// calls this before anything creates the directory, so this must not be
+		// an error; Save creates the directory afterwards.
+		if errors.Is(err, fs.ErrNotExist) {
+			return "", false, nil
+		}
 		return "", false, err
 	}
-	sort.Strings(matches)
 	for _, m := range matches {
 		p, err := loadFile(m)
 		if err != nil {

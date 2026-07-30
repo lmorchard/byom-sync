@@ -191,7 +191,12 @@ errcheck findings CI caught).
   all delegate to it, and it matches `internal/site/tree.go`'s rules. Do not
   reintroduce a `filepath.Glob(dir + "/*.yaml")` — that shallow glob silently
   found zero playlists in a subdirectory-organized hub, which broke `resolve`
-  and `dates` for months without an error.
+  and `dates` for months without an error. `FindFileByID` was a missed call site
+  of exactly that bug: because it scanned only the hub root, `sync` decided every
+  subdirectory-filed playlist was new and wrote a duplicate at the root — 57 of
+  them on the live hub in one run, leaving the originals stale. It delegates to
+  `HubPaths` now, treating a not-yet-created hub directory as empty rather than an
+  error (sync calls it before anything creates the directory).
 - **`resolve all` drives the per-stage globals.** The stage functions
   (`runResolveSpotify`/`runResolveArt`/`runResolveYouTube`) read package-level
   flag vars, and `resolveNoCache` in particular is assigned by two of them. When
