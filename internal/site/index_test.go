@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -20,9 +21,17 @@ func TestWriteIndexJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var nodes []IndexNode
-	if err := json.Unmarshal(data, &nodes); err != nil {
+	var idx SiteIndex
+	if err := json.Unmarshal(data, &idx); err != nil {
 		t.Fatalf("unmarshal: %v", err)
+	}
+	nodes := idx.Children
+	// The fixture hub features nothing, so the key is absent entirely.
+	if len(idx.Featured) != 0 {
+		t.Errorf("Featured = %+v, want empty for a hub with nothing featured", idx.Featured)
+	}
+	if strings.Contains(string(data), `"featured"`) {
+		t.Errorf("unfeatured hub should omit the featured key:\n%s", data)
 	}
 	if len(nodes) != 2 || !nodes[0].IsDir || nodes[0].Name != "synthpop" {
 		t.Fatalf("top-level nodes = %+v", nodes)
@@ -53,10 +62,11 @@ func TestIndexNodeImage(t *testing.T) {
 		t.Fatal(err)
 	}
 	data, _ := os.ReadFile(filepath.Join(out, "site-index.json"))
-	var nodes []IndexNode
-	if err := json.Unmarshal(data, &nodes); err != nil {
+	var idx SiteIndex
+	if err := json.Unmarshal(data, &idx); err != nil {
 		t.Fatal(err)
 	}
+	nodes := idx.Children
 	if nodes[1].Name != "2014-top-songs" {
 		t.Fatalf("expected 2014-top-songs leaf, got %q", nodes[1].Name)
 	}
@@ -81,10 +91,11 @@ func TestIndexNodeYear(t *testing.T) {
 		t.Fatal(err)
 	}
 	data, _ := os.ReadFile(filepath.Join(out, "site-index.json"))
-	var nodes []IndexNode
-	if err := json.Unmarshal(data, &nodes); err != nil {
+	var idx SiteIndex
+	if err := json.Unmarshal(data, &idx); err != nil {
 		t.Fatal(err)
 	}
+	nodes := idx.Children
 	byName := map[string]IndexNode{}
 	for _, n := range nodes {
 		byName[n.Name] = n
@@ -94,5 +105,62 @@ func TestIndexNodeYear(t *testing.T) {
 	}
 	if byName["b"].Year != 0 {
 		t.Errorf("undated b.Year = %d, want 0", byName["b"].Year)
+	}
+}
+
+func TestWriteIndexJSON_Featured(t *testing.T) {
+	dir := t.TempDir()
+	// Two featured playlists — one nested, one at the root — plus one unfeatured.
+	mustWrite(t, filepath.Join(dir, "newer.yaml"),
+		"title: Newer\nfeatured: true\ndate_updated: 2026-02-01T00:00:00Z\ntracks:\n  - {title: T, artist: X, image: 'http://img/n.jpg'}\n")
+	mustWrite(t, filepath.Join(dir, "plain.yaml"),
+		"title: Plain\ndate_updated: 2026-03-01T00:00:00Z\ntracks:\n  - {title: T, artist: X}\n")
+	sub := filepath.Join(dir, "sub")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustWrite(t, filepath.Join(sub, "older.yaml"),
+		"title: Older\nfeatured: true\ndate_updated: 2025-01-01T00:00:00Z\ntracks:\n  - {title: T, artist: X}\n")
+
+	root, err := BuildTree(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := t.TempDir()
+	if err := WriteIndexJSON(out, root); err != nil {
+		t.Fatalf("WriteIndexJSON: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(out, "site-index.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var idx SiteIndex
+	if err := json.Unmarshal(data, &idx); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	// Flat, newest-first, absolute paths, and the nav fields the sidebar needs.
+	if len(idx.Featured) != 2 {
+		t.Fatalf("Featured = %+v, want 2 entries", idx.Featured)
+	}
+	if idx.Featured[0].Title != "Newer" || idx.Featured[1].Title != "Older" {
+		t.Errorf("Featured order = %q, %q; want Newer, Older", idx.Featured[0].Title, idx.Featured[1].Title)
+	}
+	if idx.Featured[1].Path != "/sub/older/" {
+		t.Errorf("nested featured Path = %q, want /sub/older/", idx.Featured[1].Path)
+	}
+	// Featured entries carry the same nav fields as tree entries (dated playlists
+	// get a "1 track · Feb 2026"-style summary).
+	if !strings.HasPrefix(idx.Featured[0].Meta, "1 track") || idx.Featured[0].Image != "http://img/n.jpg" {
+		t.Errorf("featured entry missing nav fields: %+v", idx.Featured[0])
+	}
+	if idx.Featured[0].Year != 2026 {
+		t.Errorf("featured Year = %d, want 2026", idx.Featured[0].Year)
+	}
+
+	// Featuring is additive: the tree still holds everything — the "sub"
+	// directory plus the two root leaves.
+	if len(idx.Children) != 3 {
+		t.Errorf("Children = %d entries, want 3 (sub dir + 2 root leaves)", len(idx.Children))
 	}
 }

@@ -264,6 +264,13 @@ The output is a static tree ready for any static host: a landing page, one page
 per playlist (each with a chrome-less `/embed/` variant for iframing into a
 blog), `site-index.json`, `feed.xml`, and a `CNAME`. File playlists into
 subdirectories in the hub and the site mirrors that structure as its nav tree.
+
+Set `featured: true` on a playlist to promote it: featured playlists appear in a
+`Featured` list at the top of the landing page and at the top of the sidebar nav
+on every playlist and folder page, newest `date_updated` first. They also keep
+their usual place in the year groups and folder listings, and the flag works at
+any depth in the hub.
+
 Playback provider and credentials are handled by the player's own settings panel;
 the generator only sets the defaults above. See
 [`.github/workflows/example-site-deploy.yml.example`](.github/workflows/example-site-deploy.yml.example)

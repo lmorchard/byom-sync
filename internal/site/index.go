@@ -7,8 +7,9 @@ import (
 )
 
 // IndexNode is the nav projection of a Node serialized into site-index.json (no
-// track data beyond the summary Meta line). Path is absolute-from-root with
-// leading + trailing slashes.
+// track data beyond the summary Meta line). It appears both in the nav tree and
+// in the flat featured list. Path is absolute-from-root with leading + trailing
+// slashes.
 type IndexNode struct {
 	Name     string      `json:"name"`
 	Title    string      `json:"title"`
@@ -42,9 +43,22 @@ func toIndexNodes(children []*Node) []IndexNode {
 	return out
 }
 
-// WriteIndexJSON writes the nav tree (root's children) to site-index.json.
+// SiteIndex is the payload of site-index.json: the flat Featured list plus the
+// nav tree. Featured is sorted here rather than client-side because Go has the
+// full playlist dates and IndexNode only carries the year.
+type SiteIndex struct {
+	Featured []IndexNode `json:"featured,omitempty"`
+	Children []IndexNode `json:"children"`
+}
+
+// WriteIndexJSON writes the featured list and the nav tree (root's children) to
+// site-index.json.
 func WriteIndexJSON(outDir string, root *Node) error {
-	data, err := json.MarshalIndent(toIndexNodes(root.Children), "", "  ")
+	idx := SiteIndex{Children: toIndexNodes(root.Children)}
+	if featured := featuredOf(root); len(featured) > 0 {
+		idx.Featured = toIndexNodes(featured)
+	}
+	data, err := json.MarshalIndent(idx, "", "  ")
 	if err != nil {
 		return err
 	}

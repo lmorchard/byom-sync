@@ -81,6 +81,7 @@ func NewRenderer(site SiteMeta) (*Renderer, error) {
 		"plainText":     plainText,
 		"dirsOf":        dirsOf,
 		"yearGroupsOf":  yearGroupsOf,
+		"featuredOf":    featuredOf,
 	}
 	tmpl, err := template.New("site").Funcs(funcs).ParseFS(embedded, "templates/*.html")
 	if err != nil {

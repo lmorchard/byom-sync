@@ -66,7 +66,12 @@ YouTube resolution cache in `internal/rcache/` — an index, not a source of tru
   output and references downloaded images as `base_url + image_file` in each
   `playlist.jspf.json` (via the exporter's `art_base` option) and the OpenGraph
   image, serving downloaded art from the site to survive source-URL rot; tracks
-  without a local cached copy retain their source URLs.
+  without a local cached copy retain their source URLs. A playlist with
+  `featured: true` is additionally promoted into a flat `Featured` list at the top
+  of the landing page and of the sidebar nav (`featuredOf` walks the whole tree);
+  it keeps its normal position in the year groups and nav tree as well.
+  `site-index.json` is an object — `{"featured": [...], "children": [...]}` —
+  with the featured list pre-sorted server-side.
   The RSS feed (`internal/site/feedbody.go`) gives each item a rich HTML body —
   cover art, playlist prose, a meta line, and the first `site.feed_track_limit`
   tracks (default 20) as YouTube links, falling back to an `https://`
@@ -74,7 +79,8 @@ YouTube resolution cache in `internal/rcache/` — an index, not a source of tru
   `<description>` and `<content:encoded>` because many readers render only the
   former. Track thumbnails and the per-item `<enclosure>` use locally stored art
   only: an enclosure needs a byte length, which would otherwise mean a network
-  request during an offline build.
+  request during an offline build. The feed carries the newest
+  `site.feed_item_limit` playlists (default 25).
 
 ## Commands (Makefile-first)
 
@@ -192,7 +198,9 @@ pinned to Node-24 versions (checkout@v7, setup-go@v6, action-gh-release@v3).
 - Dev-session artifacts live in `docs/dev-sessions/{timestamp}-{slug}/`
   (`spec.md`/`research.md`/`plan.md`/`notes.md`). The `/dev-session` skill drives
   spec → plan → execute → pr.
-- Commit trailer: `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`.
+- Commit trailer: end agent-authored commits with a `Co-Authored-By:` line naming
+  whichever model actually wrote them. Don't copy a version out of this file —
+  it would go stale, and the trailer should say who did the work.
 - Verify before claiming done: run `make lint && make test && make build` and
   read the output. For live Spotify behavior, a real Premium account + registered
   app is needed (that's manual).

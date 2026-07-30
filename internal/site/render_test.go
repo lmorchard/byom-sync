@@ -237,3 +237,74 @@ func TestRenderPlaylistDescriptionDecoded(t *testing.T) {
 		t.Error("description meta tags should not be double-encoded (&amp; found)")
 	}
 }
+
+func TestRenderLanding_FeaturedSection(t *testing.T) {
+	hub := writeFixtureHub(t)
+	// Feature the nested playlist, to prove the section is not limited to the
+	// hub root, and give it a description so the card blurb renders.
+	mustWrite(t, filepath.Join(hub, "synthpop", "bleep-bloop-bop.yaml"),
+		"title: Bleep Bloop Bop\ncreator: les\nfeatured: true\ndescription: Bleeps and bloops.\ntracks:\n  - {title: T2, artist: A2}\n")
+	root, err := BuildTree(hub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := NewRenderer(testSite())
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := t.TempDir()
+	if err := r.RenderSite(out, root); err != nil {
+		t.Fatalf("RenderSite: %v", err)
+	}
+	b, err := os.ReadFile(filepath.Join(out, "index.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	landing := string(b)
+	if !strings.Contains(landing, `class="year featured">Featured`) {
+		t.Error("landing missing Featured heading")
+	}
+	// The featured card links to the nested playlist and renders as a normal card.
+	if !strings.Contains(landing, `class="playlist-card" href="/synthpop/bleep-bloop-bop/"`) {
+		t.Error("landing Featured section missing the featured playlist card")
+	}
+	// Featuring is additive: the playlist still appears under its folder, and the
+	// unfeatured root playlist is untouched in its year group.
+	if !strings.Contains(landing, `href="/synthpop/"`) {
+		t.Error("landing lost the folder listing")
+	}
+	if !strings.Contains(landing, `href="/2014-top-songs/"`) {
+		t.Error("landing lost the unfeatured playlist")
+	}
+	// The Featured heading precedes the year groups.
+	if strings.Index(landing, "Featured") > strings.Index(landing, `class="tree"`) {
+		t.Error("Featured section should come before the tree section")
+	}
+}
+
+func TestRenderLanding_NoFeatured(t *testing.T) {
+	root, err := BuildTree(writeFixtureHub(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := NewRenderer(testSite())
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := t.TempDir()
+	if err := r.RenderSite(out, root); err != nil {
+		t.Fatalf("RenderSite: %v", err)
+	}
+	b, err := os.ReadFile(filepath.Join(out, "index.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	landing := string(b)
+	if strings.Contains(landing, "Featured") {
+		t.Error("landing should render no Featured heading when nothing is featured")
+	}
+	// The regular listing is unaffected.
+	if !strings.Contains(landing, `class="playlist-card"`) {
+		t.Error("landing lost its playlist cards")
+	}
+}
