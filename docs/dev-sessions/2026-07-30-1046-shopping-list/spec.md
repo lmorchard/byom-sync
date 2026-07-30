@@ -158,10 +158,28 @@ caught the same failure mode three times: Ride's *Peace Sign* matched against
 against "The Sinister Urge" (0.62), Sara Lov's *I Already Love You* against
 "Summertime Blues - EP" (0.21).
 
-Two of those three are real albums iTunes very likely stocks — Discogs found
-both — so 65% probably understates iTunes and reflects query construction rather
-than catalogue coverage. Worth trying `attribute=albumTerm` or separate
-artist/album terms.
+**65% is iTunes' ceiling here, and query construction is not a lever.** Four
+constructions were measured against the same 31-album residue, 124 requests:
+
+| Variant | Hits | |
+| --- | --- | --- |
+| `term="artist album"`, limit 5 (baseline) | 20/31 (65%) | — |
+| same, limit 25 | 20/31 (65%) | no change |
+| `attribute=mixTerm`, limit 25 | 20/31 (65%) | no change |
+| `attribute=albumTerm`, limit 25 | 17/31 (55%) | worse |
+
+No variant rescued any gated album. `albumTerm` is actively harmful: dropping the
+artist lets same-titled albums by other artists dominate, and the gate correctly
+rejects them.
+
+The initial read — that 65% understated iTunes — was wrong. **8 of the 11 gated
+cases return no priced result at all**, which is absence or stream-only status,
+not a matching failure. Rob Zombie's *Hellbilly Deluxe* returns nothing priced
+even when searching its exact album title, which for a platinum record means
+Apple no longer sells it rather than that the query was poor.
+
+The purchase gate is doing real work here: it is what distinguishes "Apple has
+this to stream" from "Apple will sell you this."
 
 ### Discogs — small but genuinely additive
 
@@ -171,7 +189,8 @@ per minute; 60 with a token. On the same 31-album residue it scored 13 hits
 of them cases where iTunes' search failed to surface a record it probably has.
 
 Kept as the last tier because it is one request and those 2 albums are 6% of the
-residue. Worth being clear about what a Discogs link *is*, though: a marketplace
+residue — and, after the iTunes query experiment came back empty, because Discogs
+is the **only** source that recovers them. Worth being clear about what a Discogs link *is*, though: a marketplace
 listing for secondhand physical media. It does not fill a gap in a digital
 collection unless the record gets ripped, and a secondhand sale pays the artist
 nothing. That makes it a genuine last resort rather than a preference-driven
@@ -431,11 +450,11 @@ the links most worth having.
 
 ## Open questions
 
-- iTunes query construction is the biggest remaining lever. Two of the three
-  gate rejections were real albums Discogs found, so the 65% likely understates
-  it. Try `attribute=albumTerm` or separate artist/album terms and re-measure.
-- Is Discogs worth building at all? It contributed 2 unique albums out of 60
-  (3 percentage points). Defensible to ship tiers 1–2 and stop.
+- Is Discogs worth building? It contributes 2 unique albums out of 60 (3
+  percentage points) — but it is now the only route to them, since the iTunes
+  query experiment failed to recover any. Shipping tiers 1–2 and stopping is
+  still defensible; this is a judgement call about 3 points of coverage, not an
+  open technical question.
 - Threshold 0.8 is supported by a bimodal score distribution on one 60-album
   sample. Worth re-checking if iTunes query construction changes.
 - The 60-album sample is a single draw. Bandcamp measured 47% on both a 30-album
@@ -453,6 +472,9 @@ Recorded because the reasoning is worth not repeating:
 - **Odesli.** Rejected on no Bandcamp coverage and a 10 req/min ceiling.
 - **Bandcamp cover art** in this feature, including capturing the id. Split to
   byom-sync#54 after measuring that only 0.3% of tracks lack art.
+- **Improving iTunes coverage via query construction.** Four variants measured;
+  none beat the baseline and one was worse. 65% is the ceiling. Do not re-try
+  `albumTerm` — it loses the artist signal.
 - **Promoting Discogs above iTunes on DRM grounds.** The premise doesn't hold —
   iTunes purchases are DRM-free (iTunes Plus, since 2009); it's Apple Music
   streaming that is protected. Reordering would have swapped a DRM-free download

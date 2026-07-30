@@ -134,12 +134,37 @@ before redesigning around it — but inverted. There the mechanism worked and th
 data was missing; here the concern was well-founded in spirit and wrong in fact,
 and acting on it literally would have made the feature worse.
 
-## Open questions for implementation
+## A hypothesis that didn't survive
 
-- iTunes query construction — `attribute=albumTerm` or separate artist/album
-  terms, then re-measure. Likely worth more than any additional tier.
-- Is Discogs worth building? 2 unique albums out of 60 is 3 percentage points.
-  Shipping tiers 1–2 and stopping is defensible.
+The measured run left one confident-sounding lead: two of iTunes' three gate
+rejections were real albums Discogs found, so 65% "must" have understated iTunes
+and better query construction would recover them. It was stated as the biggest
+remaining lever, likely worth more than building another tier.
+
+Four constructions, 124 requests, and it was simply wrong. Baseline 20/31, wider
+limit 20/31, `mixTerm` 20/31, `albumTerm` 17/31 — no variant rescued a single
+gated album, and `albumTerm` was worse because dropping the artist from the query
+lets same-titled albums by other artists win.
+
+The tell was in the baseline output all along and got read past: **8 of the 11
+gated cases return "no priced result at all"**, not a wrong album. That's absence
+or stream-only status, not a matching failure. Rob Zombie's *Hellbilly Deluxe*
+returns nothing priced even when searching its exact title — for a platinum
+record, Apple has stopped selling it.
+
+Two consequences. 65% is iTunes' real ceiling. And the Discogs recommendation
+inverts: it had been argued down as competing with the iTunes fix for the same 2
+albums, but with no iTunes fix, Discogs is the only route to them.
+
+Worth noting the pattern across the session — three of four confident
+recommendations were reversed by measurement (MusicBrainz tier, the sidecar, this
+one), and a fourth by checking a premise (the DRM question). The measurements
+were cheap; the confidence was not calibrated.
+
+## Open questions for implementation
+- Is Discogs worth building? 2 unique albums out of 60 is 3 percentage points,
+  but it is now the only route to them. A judgement call, not a technical
+  question.
 - Tiers 2 and 3 have one measurement each. Bandcamp has two agreeing samples.
 - Bleep and Boomkat search URLs: guessed, unverifiable by script (curl,
   Playwright, WebFetch all failed for different reasons), then checked by Les in
