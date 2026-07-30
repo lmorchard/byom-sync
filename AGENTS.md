@@ -184,7 +184,9 @@ pinned to Node-24 versions (checkout@v7, setup-go@v6, action-gh-release@v3).
 - Dev-session artifacts live in `docs/dev-sessions/{timestamp}-{slug}/`
   (`spec.md`/`research.md`/`plan.md`/`notes.md`). The `/dev-session` skill drives
   spec → plan → execute → pr.
-- Commit trailer: `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`.
+- Commit trailer: end agent-authored commits with a `Co-Authored-By:` line naming
+  whichever model actually wrote them. Don't copy a version out of this file —
+  it would go stale, and the trailer should say who did the work.
 - Verify before claiming done: run `make lint && make test && make build` and
   read the output. For live Spotify behavior, a real Premium account + registered
   app is needed (that's manual).
