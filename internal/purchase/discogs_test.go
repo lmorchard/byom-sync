@@ -10,6 +10,16 @@ import (
 	"testing"
 )
 
+// discogsHeaders records the headers each of the two requests carried. They are
+// captured separately because the two-step lookup builds its second request
+// from a URL out of the search response — an easy place to lose the headers —
+// and Discogs rejects default user agents outright, so a regression there would
+// fail in production while a search-only assertion still passed.
+type discogsHeaders struct {
+	searchAuth, searchUA   string
+	releaseAuth, releaseUA string
+}
+
 // serveDiscogs routes /database/search to the search fixture and everything
 // else to the release fixture, rewriting the resource_url placeholder so the
 // second request lands back on the same server. releaseHits, if non-nil,
@@ -18,7 +28,7 @@ import (
 // second request never fires (e.g. a first-pass gate that rejects for the
 // wrong reason), so tests that care about the release step assert on this
 // count instead of assuming it happened.
-func serveDiscogs(t *testing.T, releaseFixture string, gotAuth *string, releaseHits *int) *httptest.Server {
+func serveDiscogs(t *testing.T, releaseFixture string, hdrs *discogsHeaders, releaseHits *int) *httptest.Server {
 	t.Helper()
 	read := func(n string) string {
 		b, err := os.ReadFile(filepath.Join("testdata", n))
@@ -32,16 +42,21 @@ func serveDiscogs(t *testing.T, releaseFixture string, gotAuth *string, releaseH
 	mux := http.NewServeMux()
 	srv := httptest.NewUnstartedServer(mux)
 	mux.HandleFunc("/database/search", func(w http.ResponseWriter, r *http.Request) {
-		if gotAuth != nil {
-			*gotAuth = r.Header.Get("Authorization")
+		if hdrs != nil {
+			hdrs.searchAuth = r.Header.Get("Authorization")
+			hdrs.searchUA = r.Header.Get("User-Agent")
 		}
 		_, _ = w.Write([]byte(strings.ReplaceAll(
 			search, "RESOURCE_URL_PLACEHOLDER", "http://"+srv.Listener.Addr().String()+"/releases/11662135",
 		)))
 	})
-	mux.HandleFunc("/releases/", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/releases/", func(w http.ResponseWriter, r *http.Request) {
 		if releaseHits != nil {
 			*releaseHits++
+		}
+		if hdrs != nil {
+			hdrs.releaseAuth = r.Header.Get("Authorization")
+			hdrs.releaseUA = r.Header.Get("User-Agent")
 		}
 		_, _ = w.Write([]byte(release))
 	})
@@ -50,6 +65,11 @@ func serveDiscogs(t *testing.T, releaseFixture string, gotAuth *string, releaseH
 	return srv
 }
 
+// The release fixture carries the shape the *release resource* actually
+// returns: an absolute uri. (The search response's uri is relative — see
+// TestDiscogsRelativeReleaseURI.) Prefixing the site onto this one is how every
+// Discogs link came out as
+// "https://www.discogs.comhttps://www.discogs.com/release/...".
 func TestDiscogsHitWithListings(t *testing.T) {
 	var hits int
 	srv := serveDiscogs(t, "discogs_release.json", nil, &hits)
@@ -95,29 +115,78 @@ func TestDiscogsRejectsNothingForSale(t *testing.T) {
 	}
 }
 
+// The search endpoint's uri is site-relative, unlike the release resource's.
+// The code shouldn't care which shape it is handed, so prove the relative form
+// still produces one scheme and one host.
+func TestDiscogsRelativeReleaseURI(t *testing.T) {
+	srv := serveDiscogs(t, "discogs_release_relative_uri.json", nil, nil)
+	dg := NewDiscogs(srv.Client(), srv.URL, "")
+
+	got, err := dg.Lookup(context.Background(), Query{Artist: "Rob Zombie", Album: "Hellbilly Deluxe"})
+	if err != nil {
+		t.Fatalf("Lookup: %v", err)
+	}
+	want := "https://www.discogs.com/release/11662135-Rob-Zombie-Hellbilly-Deluxe"
+	if got.URL != want {
+		t.Errorf("URL = %q, want %q", got.URL, want)
+	}
+}
+
+func TestDiscogsPermalink(t *testing.T) {
+	cases := map[string]string{
+		// The release resource's shape: already absolute, pass through.
+		"https://www.discogs.com/release/1-X": "https://www.discogs.com/release/1-X",
+		"http://www.discogs.com/release/1-X":  "http://www.discogs.com/release/1-X",
+		// The search response's shape: site-relative, needs the host.
+		"/release/1-X": "https://www.discogs.com/release/1-X",
+		"release/1-X":  "https://www.discogs.com/release/1-X",
+	}
+	for in, want := range cases {
+		if got := discogsPermalink(in); got != want {
+			t.Errorf("discogsPermalink(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// Both requests must carry the headers: Discogs rejects default user agents
+// outright, and dropping the token on the second request silently halves the
+// rate limit.
 func TestDiscogsSendsToken(t *testing.T) {
-	var auth string
-	srv := serveDiscogs(t, "discogs_release.json", &auth, nil)
+	var h discogsHeaders
+	srv := serveDiscogs(t, "discogs_release.json", &h, nil)
 	dg := NewDiscogs(srv.Client(), srv.URL, "secret123")
 
 	if _, err := dg.Lookup(context.Background(), Query{Artist: "Rob Zombie", Album: "Hellbilly Deluxe"}); err != nil {
 		t.Fatalf("Lookup: %v", err)
 	}
-	if auth != "Discogs token=secret123" {
-		t.Errorf("Authorization = %q", auth)
+	if h.searchAuth != "Discogs token=secret123" {
+		t.Errorf("search Authorization = %q", h.searchAuth)
+	}
+	if h.releaseAuth != "Discogs token=secret123" {
+		t.Errorf("release Authorization = %q — the second request must be authenticated too", h.releaseAuth)
+	}
+	if h.searchUA != userAgent {
+		t.Errorf("search User-Agent = %q, want %q", h.searchUA, userAgent)
+	}
+	if h.releaseUA != userAgent {
+		t.Errorf("release User-Agent = %q, want %q", h.releaseUA, userAgent)
 	}
 }
 
 func TestDiscogsNoTokenSendsNoAuth(t *testing.T) {
-	var auth string
-	srv := serveDiscogs(t, "discogs_release.json", &auth, nil)
+	var h discogsHeaders
+	srv := serveDiscogs(t, "discogs_release.json", &h, nil)
 	dg := NewDiscogs(srv.Client(), srv.URL, "")
 
 	if _, err := dg.Lookup(context.Background(), Query{Artist: "Rob Zombie", Album: "Hellbilly Deluxe"}); err != nil {
 		t.Fatalf("Lookup: %v", err)
 	}
-	if auth != "" {
-		t.Errorf("Authorization = %q, want empty", auth)
+	if h.searchAuth != "" || h.releaseAuth != "" {
+		t.Errorf("Authorization = %q/%q, want empty on both requests", h.searchAuth, h.releaseAuth)
+	}
+	// The user agent is not optional even without a token.
+	if h.searchUA != userAgent || h.releaseUA != userAgent {
+		t.Errorf("User-Agent = %q/%q, want %q on both requests", h.searchUA, h.releaseUA, userAgent)
 	}
 }
 

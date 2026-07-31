@@ -139,8 +139,26 @@ func (d *Discogs) Lookup(ctx context.Context, q Query) (Result, error) {
 	if rel.URI == "" {
 		return Result{Kind: q.Kind()}, nil
 	}
-	// The path comes from the API's own uri field — never hand-constructed.
+	// The link comes from the API's own uri field — never hand-constructed.
 	// Discogs 403s scripted traffic, so an invented store-URL pattern can't
 	// even be verified against a live account.
-	return Result{URL: discogsSite + rel.URI, Kind: q.Kind(), Score: score}, nil
+	//
+	// TRAP: the two Discogs endpoints disagree about what `uri` means. The
+	// *search* response returns a site-relative path
+	// ("/release/249504-Rick-Astley-Never-Gonna-Give-You-Up"); the *release
+	// resource* returned here returns an absolute URL
+	// ("https://www.discogs.com/release/249504-..."). Prefixing the site
+	// unconditionally — which an earlier version did, on the search shape —
+	// produced "https://www.discogs.comhttps://www.discogs.com/release/..."
+	// for every hit. Handle both shapes rather than betting on one.
+	return Result{URL: discogsPermalink(rel.URI), Kind: q.Kind(), Score: score}, nil
+}
+
+// discogsPermalink turns a release `uri` into a browsable URL, tolerating both
+// shapes the API uses (see the note in Lookup).
+func discogsPermalink(uri string) string {
+	if strings.HasPrefix(uri, "http://") || strings.HasPrefix(uri, "https://") {
+		return uri
+	}
+	return discogsSite + "/" + strings.TrimPrefix(uri, "/")
 }
