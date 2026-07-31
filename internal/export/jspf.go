@@ -67,6 +67,10 @@ type jspfExt struct {
 	// indicator and degrades gracefully when absent.
 	SpotifyPresent *bool  `json:"spotify_present,omitempty"`
 	DateOrphaned   string `json:"date_orphaned,omitempty"`
+	// PurchaseURL is a best-effort "where to buy this" link from
+	// `resolve purchase`. byom-player renders it in the shopping list and
+	// degrades to a constructed search URL when absent.
+	PurchaseURL string `json:"purchase_url,omitempty"`
 }
 
 type jspfResolved struct {
@@ -125,6 +129,10 @@ func (JSPFExporter) Export(p playlist.Playlist, outputPath string, opts map[stri
 			absent := false
 			ext.SpotifyPresent = &absent
 			ext.DateOrphaned = t.SyncState.DateOrphaned
+			hasExt = true
+		}
+		if t.PurchaseURL != "" {
+			ext.PurchaseURL = t.PurchaseURL
 			hasExt = true
 		}
 		if hasExt {

@@ -641,3 +641,52 @@ func TestRun_DirModeFlatHubUnchanged(t *testing.T) {
 		t.Errorf("flat hub should produce out/solo.m3u8 with no subdirectory: %v", err)
 	}
 }
+
+func TestJSPFEmitsPurchaseURL(t *testing.T) {
+	p := playlist.Playlist{Title: "T", Tracks: []playlist.Track{{
+		Title: "Superstar", Artist: "Beach House", Album: "Once Twice Melody",
+		PurchaseURL: "https://beachhouse.bandcamp.com/album/once-twice-melody",
+	}}}
+	out := filepath.Join(t.TempDir(), "p.jspf.json")
+	if err := (JSPFExporter{}).Export(p, out, nil); err != nil {
+		t.Fatalf("Export: %v", err)
+	}
+	data, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	var doc struct {
+		Playlist struct {
+			Track []struct {
+				Extension map[string][]struct {
+					PurchaseURL string `json:"purchase_url"`
+				} `json:"extension"`
+			} `json:"track"`
+		} `json:"playlist"`
+	}
+	if err := json.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	ext := doc.Playlist.Track[0].Extension["https://github.com/lmorchard/byom-sync"]
+	if len(ext) != 1 || ext[0].PurchaseURL != p.Tracks[0].PurchaseURL {
+		t.Errorf("purchase_url not emitted; extension = %+v", ext)
+	}
+}
+
+// A track without one must not gain an empty extension element.
+func TestJSPFOmitsEmptyPurchaseURL(t *testing.T) {
+	p := playlist.Playlist{Title: "T", Tracks: []playlist.Track{
+		{Title: "X", Artist: "Y", SyncState: playlist.SyncState{SpotifyPresent: true}},
+	}}
+	out := filepath.Join(t.TempDir(), "p.jspf.json")
+	if err := (JSPFExporter{}).Export(p, out, nil); err != nil {
+		t.Fatalf("Export: %v", err)
+	}
+	data, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if strings.Contains(string(data), "purchase_url") {
+		t.Error("empty purchase_url should be omitted entirely")
+	}
+}

@@ -230,3 +230,26 @@ func TestMerge_PreservesLocalPresentationFields(t *testing.T) {
 		t.Errorf("Title = %q, want remote's", out.Title)
 	}
 }
+
+// purchase_url is locally derived — Spotify never sends it back — so Merge must
+// carry it across or a single sync silently deletes every resolved link.
+func TestMergePreservesPurchaseURL(t *testing.T) {
+	local := Playlist{Tracks: []Track{{
+		Title: "Superstar", Artist: "Beach House", Album: "Once Twice Melody",
+		PurchaseURL: "https://beachhouse.bandcamp.com/album/once-twice-melody",
+	}}}
+	remote := Playlist{Tracks: []Track{{
+		Title: "Superstar", Artist: "Beach House", Album: "Once Twice Melody",
+	}}}
+
+	for _, strat := range []Strategy{Archive, Mirror} {
+		got := Merge(local, remote, strat, time.Now())
+		if len(got.Tracks) != 1 {
+			t.Fatalf("%s: got %d tracks, want 1", strat, len(got.Tracks))
+		}
+		if got.Tracks[0].PurchaseURL != local.Tracks[0].PurchaseURL {
+			t.Errorf("%s: purchase_url = %q, want %q — sync would silently wipe it",
+				strat, got.Tracks[0].PurchaseURL, local.Tracks[0].PurchaseURL)
+		}
+	}
+}

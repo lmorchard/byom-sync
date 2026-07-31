@@ -21,8 +21,8 @@ const (
 // Locally-derived fields survive the merge under both strategies, because Spotify
 // has no equivalent to send back and a fetched copy would otherwise blank them:
 // `featured` and the playlist hero art at the playlist level, and each surviving
-// track's `youtube_id`, `image_file`, `spotify` opt-out, and `enrich_candidates`.
-// See adoptLocalFields.
+// track's `youtube_id`, `image_file`, `purchase_url`, `spotify` opt-out, and
+// `enrich_candidates`. See adoptLocalFields.
 //
 //	Archive: union by Track.Key(). Remote tracks are marked SpotifyPresent=true
 //	         with any orphan date cleared. Local tracks absent from the remote are
@@ -92,6 +92,7 @@ func Merge(local, remote Playlist, strat Strategy, now time.Time) Playlist {
 func adoptLocalFields(remote, local Track) Track {
 	remote.YouTubeID = local.YouTubeID
 	remote.ImageFile = local.ImageFile
+	remote.PurchaseURL = local.PurchaseURL
 	remote.Spotify = local.Spotify
 	remote.EnrichCandidates = local.EnrichCandidates
 	if remote.Image == "" {
