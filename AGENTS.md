@@ -217,7 +217,8 @@ errcheck findings CI caught).
   (`resolve cache clear --source <tier>`, or `--reresolve`) after any change to
   how that tier matches, or the change silently will not apply to anything
   already cached. Note `ClearPurchaseSource` wipes the tier's whole key space,
-  misses included, so the next run re-queries everything it previously skipped.
+  misses included, so the next run re-queries everything it previously skipped
+  (byom-sync#64).
 
   iTunes results are accepted only when
   the album carries a real price — iTunes Store downloads are DRM-free, but a
