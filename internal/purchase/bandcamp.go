@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
+	"strings"
 )
 
 // bandcampEndpoint is the search endpoint Bandcamp's own site calls. It is
@@ -94,6 +96,9 @@ func (b *Bandcamp) Lookup(ctx context.Context, q Query) (Result, error) {
 		if !ok {
 			continue // wrong record, or too weak a match to trust
 		}
+		if !hostIsArtist(q.Artist, r.ItemURLPath) {
+			continue // right name, wrong account — see hostIsArtist
+		}
 		if s > best.Score {
 			best.Score, best.URL = s, r.ItemURLPath
 		}
@@ -102,4 +107,94 @@ func (b *Bandcamp) Lookup(ctx context.Context, q Query) (Result, error) {
 		return Result{Kind: q.Kind()}, nil // clean miss
 	}
 	return best, nil
+}
+
+// hostIsArtist reports whether a Bandcamp result's subdomain plausibly belongs
+// to the artist we asked for.
+//
+// This exists because `band_name` is free text the uploader controls, and the
+// confidence gate can only compare strings. Cover bands, DJ edits, karaoke and
+// stem packs routinely put the *original* artist's name in that field, so an
+// impostor scores a perfectly legitimate 1.000 on both artist and album. Three
+// real examples from the live hub, all accepted by the gate before this check:
+//
+//	Lady Gaga / MAYHEM            -> diegovalente2.bandcamp.com  (band_name "Lady Gaga")
+//	My Chemical Romance / …Parade -> firsttoelevenstems.bandcamp.com
+//	Rage Against the Machine      -> gageagainstthemachine.bandcamp.com
+//
+// The subdomain is the *account*, not a display name, so it is far harder to
+// spoof convincingly. It is the only field in the response that distinguishes
+// these cases.
+//
+// Matching is by prefix, not substring, and that distinction is load-bearing.
+// An artist's own account commonly carries a *suffix* ("glosserband",
+// "ghostcopnyc", "moaamusic"), so a prefix test keeps those. A tribute or cover
+// account, by contrast, tends to embed the artist's name in the *middle*:
+// "nevermindatributetonirvana" contains "nirvana" and passed a substring test
+// while being exactly the impostor class this function exists to reject.
+//
+// A leading "the" is stripped from both sides, since it travels freely between
+// an artist's metadata and their account name ("thebeatles" vs "beatles").
+//
+// The cost is that a legitimate *label* page whose name resembles neither the
+// artist nor a prefix of it is rejected. That trade favours precision, and a
+// rejected album is not a dead end: byom-player falls back to a constructed
+// Bandcamp search URL.
+func hostIsArtist(artist, itemURL string) bool {
+	u, err := url.Parse(itemURL)
+	if err != nil || u.Host == "" {
+		return false
+	}
+	sub := alnumFold(strings.SplitN(u.Host, ".", 2)[0])
+	a := alnumFold(artist)
+	if sub == "" || a == "" {
+		return false
+	}
+	if prefixEither(sub, a) {
+		return true
+	}
+	// A leading article travels in both directions: hub metadata may say
+	// "Daysleepers" where the account is "thedaysleepers", or the reverse.
+	// Compare with it stripped from both sides.
+	bs, ba := stripArticle(sub), stripArticle(a)
+	if bs == "" || ba == "" {
+		return false
+	}
+	return prefixEither(bs, ba)
+}
+
+// stripArticle removes a leading "the" so an artist and their account agree
+// regardless of which one carries it.
+func stripArticle(s string) string { return strings.TrimPrefix(s, "the") }
+
+// prefixEither reports whether either string is a prefix of the other.
+func prefixEither(a, b string) bool {
+	return strings.HasPrefix(a, b) || strings.HasPrefix(b, a)
+}
+
+// alnumFold reduces a string to lowercase ASCII letters and digits, folding the
+// handful of accented forms that show up in artist names so "MØAA" and the
+// account "moaamusic" still agree. Anything it can't fold is dropped.
+func alnumFold(s string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(s) {
+		if f, ok := foldRunes[r]; ok {
+			b.WriteString(f)
+			continue
+		}
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// foldRunes maps accented and stylised letters common in band names onto ASCII.
+var foldRunes = map[rune]string{
+	'ø': "o", 'å': "a", 'ä': "a", 'á': "a", 'à': "a", 'â': "a", 'ã': "a",
+	'é': "e", 'è': "e", 'ê': "e", 'ë': "e",
+	'í': "i", 'ì': "i", 'î': "i", 'ï': "i",
+	'ó': "o", 'ò': "o", 'ô': "o", 'ö': "o", 'õ': "o",
+	'ú': "u", 'ù': "u", 'û': "u", 'ü': "u",
+	'ñ': "n", 'ç': "c", 'ß': "ss", 'æ': "ae", 'œ': "oe", 'ð': "d", 'þ': "th",
 }

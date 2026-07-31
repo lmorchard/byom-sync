@@ -181,7 +181,20 @@ errcheck findings CI caught).
   gate as `spotifyenrich` (`purchase.Accept`/`Score`, built on `internal/match`,
   plus a `SubjectFloor` on top of `Threshold`) because a store's search will
   happily return a real but wrong album for a same-artist query (iTunes answers
-  "Theatre Is Evil" with "Piano Is Evil"). iTunes results are accepted only when
+  "Theatre Is Evil" with "Piano Is Evil"). **Bandcamp needs a second, different
+  check:** its `band_name` is free text the uploader controls, so cover bands,
+  DJ edits, karaoke and stem packs put the *original* artist's name in it and
+  score a legitimate 1.000 on both fields — the gate cannot see the difference.
+  `hostIsArtist` compares the account subdomain, which is far harder to spoof,
+  and does so by *prefix*: an artist's own account carries a suffix
+  ("glosserband", "ghostcopnyc") while a tribute embeds the name mid-string
+  ("nevermindatributetonirvana"), so a substring test would let tributes
+  through. Measured on 6 mainstream stress cases plus 30 random hub albums, it
+  dropped 5 of 11 accepted results and every one of the 5 was wrong, with no
+  correct match lost. This only shows up for well-known artists — nobody
+  uploads an impostor "Slow Glows" page — which is why the original 47%
+  sampling in #50 missed it entirely (that number counted acceptance, never
+  identity). iTunes results are accepted only when
   the album carries a real price — iTunes Store downloads are DRM-free, but a
   `music.apple.com` link with no price is an Apple Music *stream*, not a
   purchase. Discogs is a two-step lookup: its search response's `title` is an
