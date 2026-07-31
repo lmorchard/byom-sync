@@ -85,6 +85,47 @@ func TestITunesTrackQueryUsesSongEntity(t *testing.T) {
 	}
 }
 
+// A result with a perfect artist and album match but no collectionPrice field
+// (decodes to 0.0) must be rejected by the price gate, not the confidence gate.
+// This proves the gate won't regress if someone later changes it to price < 0,
+// reasoning that -1 is the only stream-only sentinel.
+func TestITunesRejectsMissingPrice(t *testing.T) {
+	srv := serveFile(t, "itunes_noprice.json", nil)
+	it := NewITunes(srv.Client(), srv.URL)
+
+	got, err := it.Lookup(context.Background(), Query{Artist: "Adele", Album: "25"})
+	if err != nil {
+		t.Fatalf("Lookup: %v", err)
+	}
+	if got.URL != "" {
+		t.Errorf("URL = %q, want empty — missing collectionPrice decodes to 0.0, rejected by price gate", got.URL)
+	}
+}
+
+func TestITunesServerError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+	it := NewITunes(srv.Client(), srv.URL)
+
+	if _, err := it.Lookup(context.Background(), Query{Artist: "A", Album: "B"}); err == nil {
+		t.Error("expected an error for HTTP 500")
+	}
+}
+
+func TestITunesMalformedJSON(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{invalid json`))
+	}))
+	defer srv.Close()
+	it := NewITunes(srv.Client(), srv.URL)
+
+	if _, err := it.Lookup(context.Background(), Query{Artist: "A", Album: "B"}); err == nil {
+		t.Error("expected an error for malformed JSON")
+	}
+}
+
 func TestITunesName(t *testing.T) {
 	if got := NewITunes(nil, "").Name(); got != "itunes" {
 		t.Errorf("Name() = %q, want \"itunes\"", got)
