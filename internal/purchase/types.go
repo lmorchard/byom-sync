@@ -21,24 +21,35 @@ const (
 	KindTrack Kind = "track"
 )
 
-// Threshold is the minimum Score for an accepted match. Shared with the Spotify
-// enricher; empirically supported here — in a 31-album measured run accepted
-// matches scored 1.00 and most rejections scored 0.62 or below. The closest
-// measured rejection, "Piano Is Evil" for a "Theatre Is Evil" query, scores
-// 0.79 (see the weights above) — still correctly below the 0.8 gate, but by a
-// narrower margin than the rest of the corpus.
+// Threshold is the minimum combined Score for an accepted match. Shared with
+// the Spotify enricher. On its own it is not a safe gate: a store's search has
+// already filtered by artist, so a perfect artist match is nearly free, and a
+// wrong album can ride that free half of the score over 0.8 on a merely
+// coincidental title overlap. The real iTunes response "Amanda Palmer / Piano
+// Is Evil" for a "Theatre Is Evil" query scores 0.808 combined — above
+// Threshold — on an artist similarity of 1.0 and an album similarity of only
+// 0.615. See SubjectFloor for the second condition that actually rejects it;
+// callers should use Accept, not this constant alone.
 const Threshold = spotifyenrich.DefaultThreshold
 
-// Scoring weights (must sum to 1.0). The album is the actual thing being
-// purchased, so it dominates the way title dominates in track enrichment;
-// artist is a secondary check, not an equal partner. Equal weighting lets a
-// same-artist, wrong-album response slip through: the real iTunes response
-// "Amanda Palmer / Piano Is Evil" for a "Theatre Is Evil" query scores 0.81
-// at 0.5/0.5 — above threshold — because the shared artist alone contributes
-// 0.5. At 0.45/0.55 it scores 0.79, correctly rejected.
+// SubjectFloor is the minimum independent similarity the subject (album or
+// track title) must clear, regardless of how well the artist matches. It
+// exists because Score blends artist and album into one number, and the
+// artist half is nearly free — stores already search by artist, so a wrong
+// album by the right artist can still combine with a merely-plausible title
+// to clear Threshold. Measured gap: Theatre Is Evil vs. Piano Is Evil scores
+// 0.615 on album similarity alone, while Theatre Is Evil vs. itself scores
+// 1.000 and Hellbilly Deluxe vs. The Sinister Urge scores 0.250. 0.70 sits in
+// that gap rather than close to either edge.
+const SubjectFloor = 0.70
+
+// Scoring weights (must sum to 1.0). Artist and album matter equally for a
+// purchase lookup, unlike track enrichment where the title dominates — but
+// equal weighting alone is not enough to reject a same-artist, wrong-album
+// response; that is what SubjectFloor is for.
 const (
-	artistWeight = 0.45
-	albumWeight  = 0.55
+	artistWeight = 0.5
+	albumWeight  = 0.5
 )
 
 // Query is one purchase lookup. Album-scoped when Album is set, else track-scoped
@@ -97,9 +108,21 @@ type Source interface {
 }
 
 // Score rates a store's returned artist+album against the query, 0..1. This is
-// the gate that stops a real-but-wrong album from becoming a purchase link:
-// iTunes answers "amanda palmer theatre is evil" with "Piano Is Evil".
+// half of the gate that stops a real-but-wrong album from becoming a purchase
+// link: iTunes answers "amanda palmer theatre is evil" with "Piano Is Evil".
+// Score alone is not sufficient to reject it — see SubjectFloor and Accept.
 func Score(q Query, artist, album string) float64 {
 	return artistWeight*match.Sim(match.Norm(q.Artist), match.Norm(artist)) +
 		albumWeight*match.Sim(match.Norm(q.subject()), match.Norm(album))
+}
+
+// Accept reports whether a store's result matches the query well enough to
+// use as a purchase link, and returns the combined score for the caller to
+// rank by. Both conditions must hold: the subject (album or track title)
+// must independently clear SubjectFloor, and the combined score must clear
+// Threshold. See SubjectFloor for why the combined score alone is not enough.
+func Accept(q Query, artist, album string) (score float64, ok bool) {
+	score = Score(q, artist, album)
+	subjectSim := match.Sim(match.Norm(q.subject()), match.Norm(album))
+	return score, subjectSim >= SubjectFloor && score >= Threshold
 }
