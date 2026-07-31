@@ -177,15 +177,19 @@ errcheck findings CI caught).
   a full pass over whatever the previous tier left unresolved: Bandcamp →
   iTunes → Discogs.
 
-  **Hit rates, and how much to trust them.** Bandcamp is **34%**, and that is a
-  population figure, not a sample: 2,358 of 7,025 distinct albums on the live
-  hub, after the artist-identity check. iTunes (~65%) and Discogs (~39%) are
-  still *sampled* estimates from ~30 albums each, and both were measured
-  against a residue defined by the pre-identity-check Bandcamp — a residue that
-  is now larger and differently composed, so expect them to move. There is
-  deliberately no cumulative figure here until the later tiers have run at
-  volume; the old "~85%" was arithmetic over three numbers, one of which was
-  wrong.
+  **Hit rates, measured on the live hub, not sampled.** Bandcamp **34%** (2,358
+  of 7,025 distinct albums, after the artist-identity check). iTunes **66%** of
+  what Bandcamp left (3,110 of 4,690). Together that is **78% of distinct
+  albums** and **83% of tracks** — 5,707 of 7,292 albums, 11,655 of 14,119
+  tracks. Discogs has not been run at volume; its **~39%** is still a ~30-album
+  sample and should be treated as such.
+
+  Two notes on how these numbers moved. Bandcamp was documented at 47% until a
+  full run showed 34%: the 47% counted whether the gate *accepted* a result,
+  never whether the artist was right, and roughly a third of those acceptances
+  were impostor accounts. iTunes' sampled 65% did hold up at volume. The old
+  "~85% cumulative" was arithmetic over three numbers, one of which was wrong;
+  the 78% above is measured.
 
   An earlier "~47%" for Bandcamp came from counting whether the gate *accepted*
   a result, never whether the artist was right. Roughly a third of those

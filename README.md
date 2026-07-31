@@ -247,8 +247,8 @@ pass over whatever the previous tier left unresolved:
 
 1. **Bandcamp** — one request per album against Bandcamp's own search endpoint.
    Artist-friendly, DRM-free links. Measured at **34%** of all hub albums.
-2. **iTunes** — the iTunes Search API. Fills roughly 65% of what Bandcamp
-   missed (a sampled estimate — see the note below).
+2. **iTunes** — the iTunes Search API. Measured at **66%** of what Bandcamp
+   missed.
    Accepted only when the result carries a real price: iTunes Store downloads
    are DRM-free, but a `music.apple.com` link with no price is an Apple Music
    *stream*, not a purchase.
@@ -258,11 +258,10 @@ pass over whatever the previous tier left unresolved:
    — it doesn't fill a gap in a digital collection unless the record gets
    ripped, which is why it runs last.
 
-**On those numbers.** Bandcamp's 34% is a population figure — 2,358 of 7,025
-distinct albums on a real hub. The iTunes and Discogs rates are sampled from
-about 30 albums each, and were measured against a residue defined by an earlier,
-looser Bandcamp tier, so expect them to shift once those tiers run at volume.
-There is deliberately no cumulative figure until they have. Every match passes a
+**On those numbers.** Bandcamp and iTunes are population figures from a full run
+over a real 14,119-track hub — together **78% of distinct albums** (5,707 of
+7,292) and **83% of tracks** (11,655 of 14,119). Discogs' ~39% is still a
+~30-album sample, since that tier has not been run at volume. Every match passes a
 confidence gate before being accepted, since a store's search will happily
 return a real but wrong album for a same-artist query.
 
