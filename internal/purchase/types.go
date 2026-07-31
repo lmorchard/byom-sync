@@ -126,3 +126,7 @@ func Accept(q Query, artist, album string) (score float64, ok bool) {
 	subjectSim := match.Sim(match.Norm(q.subject()), match.Norm(album))
 	return score, subjectSim >= SubjectFloor && score >= Threshold
 }
+
+// userAgent identifies byom-sync to the stores. Discogs rejects default agents
+// outright; the others are simply better behaved with a real one.
+const userAgent = "byom-sync (+https://github.com/lmorchard/byom-sync)"
