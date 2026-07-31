@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -352,12 +353,20 @@ var purchaseSourcePaces = map[string]time.Duration{
 // so --reresolve can drop that tier's links without touching the others'. The
 // hub stores only the URL, so the store has to be recognised from it.
 //
-// Matched as a substring of the whole URL rather than by parsing out the host,
-// deliberately: the point of --reresolve is recovering from links a tier got
-// wrong, and a malformed URL has no host a parser would recognise. byom-sync
-// itself once emitted "https://www.discogs.comhttps://www.discogs.com/release/…",
-// whose parsed host is "www.discogs.comhttps" — a host-suffix check would leave
-// exactly the links that most need clearing.
+// Matched against the URL's *host* only, and by substring rather than suffix.
+// Both halves of that are deliberate:
+//
+//   - Host only, because the marker can legitimately appear elsewhere in a
+//     hand-authored URL — "https://duckduckgo.com/?q=bandcamp.com+x" is not a
+//     Bandcamp link and must survive a --reresolve of the bandcamp tier.
+//   - Substring rather than suffix, because the point of --reresolve is
+//     recovering from links a tier got wrong. byom-sync itself once emitted
+//     "https://www.discogs.comhttps://www.discogs.com/release/…", whose parsed
+//     host is "www.discogs.comhttps" — a suffix check would leave exactly the
+//     links that most need clearing.
+//
+// A URL that will not parse at all falls back to whole-string matching, since
+// there is no host to inspect and it is still a link some tier wrote.
 var purchaseSourceMarkers = map[string][]string{
 	"bandcamp": {"bandcamp.com"},
 	"itunes":   {"music.apple.com", "itunes.apple.com"},
@@ -378,15 +387,28 @@ func clearPurchaseURLs(p *playlist.Playlist, source string) int {
 		if u == "" {
 			continue
 		}
-		for _, m := range markers {
-			if strings.Contains(u, m) {
-				p.Tracks[i].PurchaseURL = ""
-				n++
-				break
-			}
+		if matchesPurchaseSource(u, markers) {
+			p.Tracks[i].PurchaseURL = ""
+			n++
 		}
 	}
 	return n
+}
+
+// matchesPurchaseSource reports whether a stored purchase_url was produced by
+// the tier owning markers. See purchaseSourceMarkers for why this looks at the
+// host by substring, and why an unparseable URL falls back to the whole string.
+func matchesPurchaseSource(rawURL string, markers []string) bool {
+	hay := rawURL
+	if u, err := url.Parse(rawURL); err == nil && u.Host != "" {
+		hay = u.Host
+	}
+	for _, m := range markers {
+		if strings.Contains(hay, m) {
+			return true
+		}
+	}
+	return false
 }
 
 // purchaseSourcesFor builds the tier list for a --source value. "all" is the
@@ -525,6 +547,9 @@ func runResolvePurchase(ctx context.Context) error {
 			log.Warnf("--reresolve: cleared %d cached %s row(s)", cleared, src.Name())
 		}
 
+		// tierFilled counts tracks: one album lookup fills every track on that
+		// album. tierMissed counts lookups, which are albums — except for a
+		// track with no album, which is its own lookup.
 		var tierFilled, tierMissed, tierFiles, tierDropped int
 		stoppedOnErrors := false
 		for _, path := range paths {
@@ -538,7 +563,7 @@ func runResolvePurchase(ctx context.Context) error {
 			if purchaseReresolve {
 				if dropped := clearPurchaseURLs(&p, src.Name()); dropped > 0 {
 					tierDropped += dropped
-					log.Debugf("  %s: dropped %d existing %s link(s) for re-resolution", base, dropped, src.Name())
+					log.Debugf("  %s: dropped %d existing %s track link(s) for re-resolution", base, dropped, src.Name())
 				}
 			}
 
@@ -590,15 +615,15 @@ func runResolvePurchase(ctx context.Context) error {
 			}
 		}
 		if tierDropped > 0 {
-			log.Warnf("tier %s: --reresolve dropped %d existing link(s) before re-running", src.Name(), tierDropped)
+			log.Warnf("tier %s: --reresolve dropped %d existing track link(s) before re-running", src.Name(), tierDropped)
 		}
 		how := "done"
 		if stoppedOnErrors {
 			how = "stopped early on errors"
 		}
-		log.Infof("tier %s: filled %d, missed %d across %d file(s) (%s)", src.Name(), tierFilled, tierMissed, tierFiles, how)
+		log.Infof("tier %s: filled %d track(s), missed %d album(s) across %d file(s) (%s)", src.Name(), tierFilled, tierMissed, tierFiles, how)
 	}
-	log.Warnf("purchase resolve done: %d link(s) filled", total)
+	log.Warnf("purchase resolve done: %d track(s) filled", total)
 	return nil
 }
 
