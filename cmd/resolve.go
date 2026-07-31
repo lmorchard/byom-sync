@@ -14,6 +14,7 @@ import (
 	"github.com/lmorchard/byom-sync/internal/auth"
 	"github.com/lmorchard/byom-sync/internal/coverart"
 	"github.com/lmorchard/byom-sync/internal/playlist"
+	"github.com/lmorchard/byom-sync/internal/purchase"
 	"github.com/lmorchard/byom-sync/internal/rcache"
 	"github.com/lmorchard/byom-sync/internal/spotifyenrich"
 	"github.com/lmorchard/byom-sync/internal/spotifyfetch"
@@ -50,14 +51,23 @@ var (
 )
 
 var (
-	allInput       string
-	allLimit       int
-	allDelay       time.Duration
-	allNoCache     bool
-	allDownload    bool
-	allSkipSpotify bool
-	allSkipArt     bool
-	allSkipYouTube bool
+	purchaseInput   string
+	purchaseSource  string
+	purchaseLimit   int
+	purchaseDelay   time.Duration
+	purchaseNoCache bool
+)
+
+var (
+	allInput        string
+	allLimit        int
+	allDelay        time.Duration
+	allNoCache      bool
+	allDownload     bool
+	allSkipSpotify  bool
+	allSkipArt      bool
+	allSkipYouTube  bool
+	allSkipPurchase bool
 )
 
 // defaultCachePath mirrors the auth config-dir logic: $XDG_CONFIG_HOME/byom-sync
@@ -319,6 +329,186 @@ paces MusicBrainz requests (its ~1 req/sec policy).`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runResolveArt(context.Background())
 	},
+}
+
+// purchaseTierOrder is the measured-best cascade. Bandcamp first: it resolves
+// ~47% of hub albums in one request each and gives artist-friendly, DRM-free
+// links. iTunes second at ~65% of what's left. Discogs last — a secondhand
+// physical listing, which doesn't fill a digital gap unless the record is
+// ripped. MusicBrainz is deliberately absent: measured at 3% with zero unique
+// contribution.
+var purchaseTierOrder = []string{"bandcamp", "itunes", "discogs"}
+
+// purchaseSourcePaces are each store's own floor. A single --delay cannot
+// express three different rate limits, so --delay acts only as an extra floor.
+var purchaseSourcePaces = map[string]time.Duration{
+	"bandcamp": 1100 * time.Millisecond, // undocumented endpoint — stay polite
+	"itunes":   3100 * time.Millisecond, // ~20 req/min
+	"discogs":  2500 * time.Millisecond, // 25 req/min unauthenticated
+}
+
+// purchaseSourcesFor builds the tier list for a --source value. "all" is the
+// full cascade in measured order; any single source name is that tier alone.
+func purchaseSourcesFor(name, discogsToken string) ([]purchase.Source, error) {
+	build := func(n string) (purchase.Source, error) {
+		switch n {
+		case "bandcamp":
+			return purchase.NewBandcamp(nil, ""), nil
+		case "itunes":
+			return purchase.NewITunes(nil, ""), nil
+		case "discogs":
+			return purchase.NewDiscogs(nil, "", discogsToken), nil
+		default:
+			return nil, fmt.Errorf("unknown purchase source %q (want one of: all, %s)",
+				n, strings.Join(purchaseTierOrder, ", "))
+		}
+	}
+	if name == "all" {
+		out := make([]purchase.Source, 0, len(purchaseTierOrder))
+		for _, n := range purchaseTierOrder {
+			s, err := build(n)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, s)
+		}
+		return out, nil
+	}
+	s, err := build(name)
+	if err != nil {
+		return nil, err
+	}
+	return []purchase.Source{s}, nil
+}
+
+// purchasePaceFor returns the larger of the source's own floor and an explicit
+// --delay, so a user can slow a tier down but never speed it past its limit.
+func purchasePaceFor(name string, explicit time.Duration) time.Duration {
+	pace := purchaseSourcePaces[name]
+	if explicit > pace {
+		return explicit
+	}
+	return pace
+}
+
+var resolvePurchaseCmd = &cobra.Command{
+	Use:   "purchase",
+	Short: "Fill missing purchase links (Bandcamp, then iTunes, then Discogs)",
+	Long: `Find a best-effort "where to buy this" URL for every hub album that has no
+purchase_url yet and write it into the YAML.
+
+Runs tier-at-a-time, each tier a full pass over whatever is still unresolved:
+Bandcamp (~47% of albums, artist-friendly and DRM-free), then iTunes (~65% of
+what's left, DRM-free downloads, accepted only when the album carries a real
+price rather than being stream-only), then Discogs (secondhand physical media,
+accepted only when copies are actually listed for sale).
+
+Every match passes a confidence gate, because stores will return a real but
+wrong album — iTunes answers "Theatre Is Evil" with "Piano Is Evil".
+
+--limit caps network lookups per tier; --delay is an extra floor on top of each
+source's own rate limit. Set discogs_token in config to raise Discogs from
+25/min to 60/min. Stopping after Bandcamp is a reasonable outcome: it is the
+cheapest pass and gives the links most worth having.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runResolvePurchase(context.Background())
+	},
+}
+
+// runResolvePurchase runs one or more purchase-link tiers over the hub. Each
+// tier is a full pass over every file: albums that already have a
+// purchase_url are skipped by purchase.Resolve, so an earlier tier's fill is
+// what lets a later tier "see" less work.
+func runResolvePurchase(ctx context.Context) error {
+	input := purchaseInput
+	if input == "" {
+		input = viper.GetString("dir")
+	}
+	paths, err := hubPaths(input)
+	if err != nil {
+		return err
+	}
+	if len(paths) == 0 {
+		log.Warnf("no playlist YAML files found under %s — nothing to do", input)
+		return nil
+	}
+
+	sources, err := purchaseSourcesFor(purchaseSource, viper.GetString("discogs_token"))
+	if err != nil {
+		return err
+	}
+
+	resolveNoCache = purchaseNoCache
+	cache, err := openCache()
+	if err != nil {
+		return fmt.Errorf("open cache: %w", err)
+	}
+	if cache != nil {
+		defer func() { _ = cache.Close() }()
+	}
+	missTTL := viper.GetDuration("cache_miss_ttl")
+
+	total := 0
+	for _, src := range sources {
+		// Budget is per tier, not per file: --limit caps lookups across the
+		// whole pass, shared by every file in this tier.
+		var budget *int
+		if purchaseLimit > 0 {
+			b := purchaseLimit
+			budget = &b
+		}
+		pace := purchasePaceFor(src.Name(), purchaseDelay)
+
+		var tierFilled, tierMissed, tierFiles int
+		for _, path := range paths {
+			p, lerr := playlist.LoadFile(path)
+			if lerr != nil {
+				return fmt.Errorf("load %s: %w", path, lerr)
+			}
+			base := filepath.Base(path)
+			tierFiles++
+
+			report := func(e purchase.Event) {
+				switch e.Kind {
+				case purchase.KindFilled:
+					log.Debugf("  %s: filled: %s - %s -> %s (via %s)", base, e.Artist, e.Album, e.URL, e.Source)
+				case purchase.KindMissed:
+					tierMissed++
+					log.Debugf("  %s: no match: %s - %s", base, e.Artist, e.Album)
+				case purchase.KindError:
+					log.Warnf("  %s: error: %s - %s: %v", base, e.Artist, e.Album, e.Err)
+				}
+			}
+
+			opts := purchase.Options{
+				Budget:   budget,
+				Pace:     pace,
+				MissTTL:  missTTL,
+				Report:   report,
+				OnFilled: func() error { return playlist.SaveFile(path, p) },
+			}
+			if cache != nil {
+				opts.Cache = cache
+			}
+			n, rerr := purchase.Resolve(ctx, src, &p, opts)
+			// Always persist: a resolve error partway through should not lose
+			// whatever was filled (and saved via OnFilled) before it.
+			if serr := playlist.SaveFile(path, p); serr != nil {
+				return fmt.Errorf("save %s: %w", path, serr)
+			}
+			if rerr != nil {
+				return fmt.Errorf("resolve purchase %s (%s): %w", path, src.Name(), rerr)
+			}
+			tierFilled += n
+			total += n
+			if budget != nil && *budget <= 0 {
+				break
+			}
+		}
+		log.Infof("tier %s: filled %d, missed %d across %d file(s)", src.Name(), tierFilled, tierMissed, tierFiles)
+	}
+	log.Warnf("purchase resolve done: %d link(s) filled", total)
+	return nil
 }
 
 // applyTrackArt fills Image for tracks that lack one and whose spotify_id has art
@@ -886,14 +1076,20 @@ type stage struct {
 
 // resolveAllStages returns the enabled stages in dependency order. The order is
 // a data dependency, not a preference: `resolve spotify` writes the ISRCs that
-// the art and youtube stages use as their cache identity (Track.Key()).
-func resolveAllStages(skipSpotify, skipArt, skipYouTube bool) []stage {
-	stages := make([]stage, 0, 3)
+// the art and youtube stages use as their cache identity (Track.Key()). The
+// purchase stage has no such dependency — it only reads Track.Artist/Album/Title
+// — so its position relative to youtube is a preference, not a requirement; it
+// runs after art here just to keep visual/shopping metadata grouped together.
+func resolveAllStages(skipSpotify, skipArt, skipPurchase, skipYouTube bool) []stage {
+	stages := make([]stage, 0, 4)
 	if !skipSpotify {
 		stages = append(stages, stage{name: "spotify", run: runResolveSpotify})
 	}
 	if !skipArt {
 		stages = append(stages, stage{name: "art", run: runResolveArt})
+	}
+	if !skipPurchase {
+		stages = append(stages, stage{name: "purchase", run: runResolvePurchase})
 	}
 	if !skipYouTube {
 		stages = append(stages, stage{name: "youtube", run: runResolveYouTube})
@@ -938,16 +1134,19 @@ func resolveAllPrereqs(stages []stage) []prereq {
 
 var resolveAllCmd = &cobra.Command{
 	Use:   "all",
-	Short: "Run the full enrichment pipeline: spotify, then art, then youtube",
+	Short: "Run the full enrichment pipeline: spotify, then art, then purchase, then youtube",
 	Long: `Run every enrichment stage over the hub in dependency order:
 
   1. resolve spotify  — isrc, spotify_id, spotify_url, duration_ms, album, image
   2. resolve art      — cover art, downloaded into <hub>/art by default
-  3. resolve youtube  — a playable youtube_id per track
+  3. resolve purchase — a best-effort purchase_url (Bandcamp, then iTunes, then Discogs)
+  4. resolve youtube  — a playable youtube_id per track
 
-The order matters: the spotify stage writes the ISRCs that the art and youtube
-stages use as their cache identity, so running them in this sequence reuses work
-instead of repeating it.
+The spotify → art → youtube ordering is a data dependency: the spotify stage
+writes the ISRCs that the art and youtube stages use as their cache identity,
+so running them in this sequence reuses work instead of repeating it. The
+purchase stage has no such dependency on the others; it runs third here
+simply to keep it near the art stage.
 
 Prerequisites for every enabled stage are checked before any work starts, so a
 missing yt-dlp is reported immediately rather than after a long art crawl. Use
@@ -970,21 +1169,26 @@ func runResolveAll(ctx context.Context, cmd *cobra.Command) error {
 	// Fan this command's flags out to the per-stage globals the run functions
 	// read. resolveNoCache is shared state that both runResolveArt and
 	// runResolveSpotify assign to (see their openCache calls), so driving all
-	// three cache flags from one value keeps the stages consistent instead of
+	// four cache flags from one value keeps the stages consistent instead of
 	// letting whichever ran last decide for the youtube stage.
-	resolveInput, artInput, enrichInput = input, input, input
-	resolveLimit, artLimit, enrichLimit = allLimit, allLimit, allLimit
-	resolveNoCache, artNoCache, enrichNoCache = allNoCache, allNoCache, allNoCache
+	resolveInput, artInput, enrichInput, purchaseInput = input, input, input, input
+	resolveLimit, artLimit, enrichLimit, purchaseLimit = allLimit, allLimit, allLimit, allLimit
+	resolveNoCache, artNoCache, enrichNoCache, purchaseNoCache = allNoCache, allNoCache, allNoCache, allNoCache
 	artDownload = allDownload
 
 	// Each stage has a different sensible pace (youtube 500ms, spotify 200ms,
 	// art 1100ms for MusicBrainz's ~1 req/sec policy), so only override them
-	// when the user actually passed --delay.
+	// when the user actually passed --delay. purchaseDelay is deliberately left
+	// out of this fan-out: it is only ever an extra floor on top of each
+	// purchase source's own per-store minimum (Bandcamp ~1/s, iTunes ~20/min,
+	// Discogs 25/min), and `resolve all`'s single --delay can't express three
+	// different rate limits, so purchaseDelay stays at its own default (0, i.e.
+	// no extra floor beyond each source's own).
 	if cmd.Flags().Changed("delay") {
 		resolveDelay, artDelay, enrichDelay = allDelay, allDelay, allDelay
 	}
 
-	stages := resolveAllStages(allSkipSpotify, allSkipArt, allSkipYouTube)
+	stages := resolveAllStages(allSkipSpotify, allSkipArt, allSkipPurchase, allSkipYouTube)
 	if len(stages) == 0 {
 		return fmt.Errorf("every stage skipped — nothing to do")
 	}
@@ -1037,6 +1241,13 @@ func init() {
 	resolveArtCmd.Flags().BoolVar(&artNoCache, "no-cache", false, "bypass the art cache")
 	resolveArtCmd.Flags().BoolVar(&artDownload, "download", false, "download resolved cover art into a local <hub>/art store and record image_file")
 
+	resolveCmd.AddCommand(resolvePurchaseCmd)
+	resolvePurchaseCmd.Flags().StringVar(&purchaseInput, "input", "", "hub YAML file or directory (default: config dir)")
+	resolvePurchaseCmd.Flags().StringVar(&purchaseSource, "source", "all", "which tier to run: all, bandcamp, itunes, discogs")
+	resolvePurchaseCmd.Flags().IntVar(&purchaseLimit, "limit", 0, "max lookups per tier this run (0 = unlimited)")
+	resolvePurchaseCmd.Flags().DurationVar(&purchaseDelay, "delay", 0, "extra floor on the pause between lookups (each source has its own minimum)")
+	resolvePurchaseCmd.Flags().BoolVar(&purchaseNoCache, "no-cache", false, "bypass the purchase cache")
+
 	resolveCmd.AddCommand(resolvePrimeCmd)
 	resolvePrimeCmd.Flags().StringVar(&primeInput, "input", "", "hub YAML file or directory (default: config dir)")
 	resolvePrimeCmd.Flags().BoolVar(&primeAssumeEmbeddable, "assume-embeddable", true, "mark seeded ids as embeddable (skip re-verify within the embed TTL)")
@@ -1049,6 +1260,7 @@ func init() {
 	resolveAllCmd.Flags().BoolVar(&allDownload, "download", true, "download cover art into <hub>/art and record image_file")
 	resolveAllCmd.Flags().BoolVar(&allSkipSpotify, "skip-spotify", false, "skip the Spotify enrichment stage")
 	resolveAllCmd.Flags().BoolVar(&allSkipArt, "skip-art", false, "skip the cover-art stage")
+	resolveAllCmd.Flags().BoolVar(&allSkipPurchase, "skip-purchase", false, "skip the purchase-link stage")
 	resolveAllCmd.Flags().BoolVar(&allSkipYouTube, "skip-youtube", false, "skip the YouTube resolution stage")
 
 	resolveCmd.AddCommand(resolveCacheCmd)

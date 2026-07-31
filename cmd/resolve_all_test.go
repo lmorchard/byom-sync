@@ -51,8 +51,8 @@ func stageNames(stages []stage) []string {
 // Order is a data dependency, not a preference: resolve spotify writes the
 // ISRCs that the art and youtube stages use as their cache identity.
 func TestResolveAllStages_DependencyOrder(t *testing.T) {
-	got := stageNames(resolveAllStages(false, false, false))
-	want := []string{"spotify", "art", "youtube"}
+	got := stageNames(resolveAllStages(false, false, false, false))
+	want := []string{"spotify", "art", "purchase", "youtube"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("got %v want %v", got, want)
 	}
@@ -60,18 +60,19 @@ func TestResolveAllStages_DependencyOrder(t *testing.T) {
 
 func TestResolveAllStages_SkipFlags(t *testing.T) {
 	tests := []struct {
-		name                         string
-		skipSpotify, skipArt, skipYT bool
-		want                         []string
+		name                                       string
+		skipSpotify, skipArt, skipPurchase, skipYT bool
+		want                                       []string
 	}{
-		{"skip spotify", true, false, false, []string{"art", "youtube"}},
-		{"skip art", false, true, false, []string{"spotify", "youtube"}},
-		{"skip youtube", false, false, true, []string{"spotify", "art"}},
-		{"skip all", true, true, true, []string{}},
+		{"skip spotify", true, false, false, false, []string{"art", "purchase", "youtube"}},
+		{"skip art", false, true, false, false, []string{"spotify", "purchase", "youtube"}},
+		{"skip purchase", false, false, true, false, []string{"spotify", "art", "youtube"}},
+		{"skip youtube", false, false, false, true, []string{"spotify", "art", "purchase"}},
+		{"skip all", true, true, true, true, []string{}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := stageNames(resolveAllStages(tt.skipSpotify, tt.skipArt, tt.skipYT))
+			got := stageNames(resolveAllStages(tt.skipSpotify, tt.skipArt, tt.skipPurchase, tt.skipYT))
 			if strings.Join(got, ",") != strings.Join(tt.want, ",") {
 				t.Errorf("got %v want %v", got, tt.want)
 			}
@@ -135,11 +136,12 @@ func TestResolveAllPrereqs_OnlyForEnabledStages(t *testing.T) {
 		stages []stage
 		want   []string
 	}{
-		{"all stages", resolveAllStages(false, false, false), []string{"Spotify token", "yt-dlp"}},
-		{"no youtube", resolveAllStages(false, false, true), []string{"Spotify token"}},
-		{"youtube only", resolveAllStages(true, true, false), []string{"yt-dlp"}},
-		{"art only still needs a token", resolveAllStages(true, false, true), []string{"Spotify token"}},
-		{"nothing", resolveAllStages(true, true, true), []string{}},
+		{"all stages", resolveAllStages(false, false, false, false), []string{"Spotify token", "yt-dlp"}},
+		{"no youtube", resolveAllStages(false, false, false, true), []string{"Spotify token"}},
+		{"youtube only", resolveAllStages(true, true, true, false), []string{"yt-dlp"}},
+		{"art only still needs a token", resolveAllStages(true, false, true, true), []string{"Spotify token"}},
+		{"purchase only needs nothing", resolveAllStages(true, true, false, true), []string{}},
+		{"nothing", resolveAllStages(true, true, true, true), []string{}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -157,20 +159,20 @@ func TestResolveAllPrereqs_OnlyForEnabledStages(t *testing.T) {
 // resolveNoCache flipped would silently change what a later test sees, since
 // Go tests in one package share process state.
 func TestRunResolveAll_FansOutFlagsAndGatesDelay(t *testing.T) {
-	origResolveDelay, origArtDelay, origEnrichDelay := resolveDelay, artDelay, enrichDelay
-	origResolveInput, origArtInput, origEnrichInput := resolveInput, artInput, enrichInput
-	origResolveLimit, origArtLimit, origEnrichLimit := resolveLimit, artLimit, enrichLimit
-	origResolveNoCache, origArtNoCache, origEnrichNoCache := resolveNoCache, artNoCache, enrichNoCache
+	origResolveDelay, origArtDelay, origEnrichDelay, origPurchaseDelay := resolveDelay, artDelay, enrichDelay, purchaseDelay
+	origResolveInput, origArtInput, origEnrichInput, origPurchaseInput := resolveInput, artInput, enrichInput, purchaseInput
+	origResolveLimit, origArtLimit, origEnrichLimit, origPurchaseLimit := resolveLimit, artLimit, enrichLimit, purchaseLimit
+	origResolveNoCache, origArtNoCache, origEnrichNoCache, origPurchaseNoCache := resolveNoCache, artNoCache, enrichNoCache, purchaseNoCache
 	origArtDownload := artDownload
-	origAllSkipSpotify, origAllSkipArt, origAllSkipYouTube := allSkipSpotify, allSkipArt, allSkipYouTube
+	origAllSkipSpotify, origAllSkipArt, origAllSkipPurchase, origAllSkipYouTube := allSkipSpotify, allSkipArt, allSkipPurchase, allSkipYouTube
 	origAllInput, origAllNoCache, origAllDelay, origAllLimit := allInput, allNoCache, allDelay, allLimit
 	t.Cleanup(func() {
-		resolveDelay, artDelay, enrichDelay = origResolveDelay, origArtDelay, origEnrichDelay
-		resolveInput, artInput, enrichInput = origResolveInput, origArtInput, origEnrichInput
-		resolveLimit, artLimit, enrichLimit = origResolveLimit, origArtLimit, origEnrichLimit
-		resolveNoCache, artNoCache, enrichNoCache = origResolveNoCache, origArtNoCache, origEnrichNoCache
+		resolveDelay, artDelay, enrichDelay, purchaseDelay = origResolveDelay, origArtDelay, origEnrichDelay, origPurchaseDelay
+		resolveInput, artInput, enrichInput, purchaseInput = origResolveInput, origArtInput, origEnrichInput, origPurchaseInput
+		resolveLimit, artLimit, enrichLimit, purchaseLimit = origResolveLimit, origArtLimit, origEnrichLimit, origPurchaseLimit
+		resolveNoCache, artNoCache, enrichNoCache, purchaseNoCache = origResolveNoCache, origArtNoCache, origEnrichNoCache, origPurchaseNoCache
 		artDownload = origArtDownload
-		allSkipSpotify, allSkipArt, allSkipYouTube = origAllSkipSpotify, origAllSkipArt, origAllSkipYouTube
+		allSkipSpotify, allSkipArt, allSkipPurchase, allSkipYouTube = origAllSkipSpotify, origAllSkipArt, origAllSkipPurchase, origAllSkipYouTube
 		allInput, allNoCache, allDelay, allLimit = origAllInput, origAllNoCache, origAllDelay, origAllLimit
 
 		// t.Cleanup can restore the Go variables above, but not pflag's own
@@ -178,7 +180,7 @@ func TestRunResolveAll_FansOutFlagsAndGatesDelay(t *testing.T) {
 		// Parse("--delay=3s") call leaves resolveAllCmd's "delay" flag marked
 		// Changed for the rest of the test binary's life, so a later test
 		// calling runResolveAll would silently inherit it.
-		for _, name := range []string{"delay", "limit", "skip-spotify", "skip-art", "skip-youtube"} {
+		for _, name := range []string{"delay", "limit", "skip-spotify", "skip-art", "skip-purchase", "skip-youtube"} {
 			resolveAllCmd.Flags().Lookup(name).Changed = false
 		}
 	})
@@ -188,7 +190,7 @@ func TestRunResolveAll_FansOutFlagsAndGatesDelay(t *testing.T) {
 	// prereq check both run before that early return, so this still exercises
 	// them. --limit=7 is a value distinguishing from every *Limit var's zero
 	// default, so the fan-out assertion below can't pass vacuously.
-	if err := resolveAllCmd.Flags().Parse([]string{"--skip-spotify", "--skip-art", "--skip-youtube", "--limit=7"}); err != nil {
+	if err := resolveAllCmd.Flags().Parse([]string{"--skip-spotify", "--skip-art", "--skip-purchase", "--skip-youtube", "--limit=7"}); err != nil {
 		t.Fatalf("parse flags: %v", err)
 	}
 	allInput = "/tmp/fake-hub-for-test"
@@ -199,13 +201,13 @@ func TestRunResolveAll_FansOutFlagsAndGatesDelay(t *testing.T) {
 		t.Fatalf("expected \"every stage skipped\" error, got %v", err)
 	}
 
-	if resolveInput != allInput || artInput != allInput || enrichInput != allInput {
-		t.Errorf("input fan-out: resolveInput=%q artInput=%q enrichInput=%q, want all %q",
-			resolveInput, artInput, enrichInput, allInput)
+	if resolveInput != allInput || artInput != allInput || enrichInput != allInput || purchaseInput != allInput {
+		t.Errorf("input fan-out: resolveInput=%q artInput=%q enrichInput=%q purchaseInput=%q, want all %q",
+			resolveInput, artInput, enrichInput, purchaseInput, allInput)
 	}
-	if !resolveNoCache || !artNoCache || !enrichNoCache {
-		t.Errorf("no-cache fan-out: resolveNoCache=%v artNoCache=%v enrichNoCache=%v, want all true",
-			resolveNoCache, artNoCache, enrichNoCache)
+	if !resolveNoCache || !artNoCache || !enrichNoCache || !purchaseNoCache {
+		t.Errorf("no-cache fan-out: resolveNoCache=%v artNoCache=%v enrichNoCache=%v purchaseNoCache=%v, want all true",
+			resolveNoCache, artNoCache, enrichNoCache, purchaseNoCache)
 	}
 	// allLimit is 7 here (via --limit=7 above), not the *Limit vars' shared
 	// zero default, so this actually exercises the fan-out instead of
@@ -213,9 +215,9 @@ func TestRunResolveAll_FansOutFlagsAndGatesDelay(t *testing.T) {
 	if allLimit != 7 {
 		t.Fatalf("test setup: allLimit = %d, want 7 (the --limit=7 just parsed)", allLimit)
 	}
-	if resolveLimit != allLimit || artLimit != allLimit || enrichLimit != allLimit {
-		t.Errorf("limit fan-out: resolveLimit=%d artLimit=%d enrichLimit=%d, want all %d",
-			resolveLimit, artLimit, enrichLimit, allLimit)
+	if resolveLimit != allLimit || artLimit != allLimit || enrichLimit != allLimit || purchaseLimit != allLimit {
+		t.Errorf("limit fan-out: resolveLimit=%d artLimit=%d enrichLimit=%d purchaseLimit=%d, want all %d",
+			resolveLimit, artLimit, enrichLimit, purchaseLimit, allLimit)
 	}
 	// --download defaults to true, which is the spec's most surprising
 	// decision (and, per the cover-art store root bug, its most consequential
@@ -236,9 +238,19 @@ func TestRunResolveAll_FansOutFlagsAndGatesDelay(t *testing.T) {
 	if enrichDelay != 200*time.Millisecond {
 		t.Errorf("enrichDelay = %v, want untouched spotify default 200ms", enrichDelay)
 	}
+	// purchaseDelay is deliberately never fanned out from allDelay: each
+	// purchase source carries its own floor (purchasePaceFor), and one
+	// --delay can't express Bandcamp/iTunes/Discogs's three different rate
+	// limits. It must stay at resolvePurchaseCmd's own default (0) even
+	// though --delay was not passed here either — this pins that runResolveAll
+	// has no assignment touching it at all, not just that it wasn't changed.
+	if purchaseDelay != 0 {
+		t.Errorf("purchaseDelay = %v, want untouched at 0 (never fanned out from --delay)", purchaseDelay)
+	}
 
-	// With --delay explicitly passed, it must override all three.
-	if err := resolveAllCmd.Flags().Parse([]string{"--skip-spotify", "--skip-art", "--skip-youtube", "--delay=3s"}); err != nil {
+	// With --delay explicitly passed, it must override the three shared-pace
+	// stages but never purchaseDelay.
+	if err := resolveAllCmd.Flags().Parse([]string{"--skip-spotify", "--skip-art", "--skip-purchase", "--skip-youtube", "--delay=3s"}); err != nil {
 		t.Fatalf("parse flags: %v", err)
 	}
 	if err := runResolveAll(context.Background(), resolveAllCmd); err == nil || !strings.Contains(err.Error(), "every stage skipped") {
@@ -247,5 +259,8 @@ func TestRunResolveAll_FansOutFlagsAndGatesDelay(t *testing.T) {
 	if resolveDelay != 3*time.Second || artDelay != 3*time.Second || enrichDelay != 3*time.Second {
 		t.Errorf("delay override: resolveDelay=%v artDelay=%v enrichDelay=%v, want all 3s",
 			resolveDelay, artDelay, enrichDelay)
+	}
+	if purchaseDelay != 0 {
+		t.Errorf("purchaseDelay = %v, want still untouched at 0 even with --delay=3s passed", purchaseDelay)
 	}
 }
