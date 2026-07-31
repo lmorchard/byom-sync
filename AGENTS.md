@@ -174,10 +174,23 @@ errcheck findings CI caught).
   → `resolve purchase` → `resolve youtube` → `export`.
 - **Purchase links:** `resolve purchase` fills `Track.PurchaseURL` with a
   best-effort "where to buy this" link, running the tiers below in order, each
-  a full pass over whatever the previous tier left unresolved: Bandcamp (~47%
-  of all hub albums, one request each, DRM-free) → iTunes (~65% of what
-  Bandcamp missed) → Discogs (~39% of what's left, 2 albums unique to it in the
-  measured hub) — ~85% cumulative. Every candidate passes the same confidence
+  a full pass over whatever the previous tier left unresolved: Bandcamp →
+  iTunes → Discogs.
+
+  **Hit rates, and how much to trust them.** Bandcamp is **34%**, and that is a
+  population figure, not a sample: 2,358 of 7,025 distinct albums on the live
+  hub, after the artist-identity check. iTunes (~65%) and Discogs (~39%) are
+  still *sampled* estimates from ~30 albums each, and both were measured
+  against a residue defined by the pre-identity-check Bandcamp — a residue that
+  is now larger and differently composed, so expect them to move. There is
+  deliberately no cumulative figure here until the later tiers have run at
+  volume; the old "~85%" was arithmetic over three numbers, one of which was
+  wrong.
+
+  An earlier "~47%" for Bandcamp came from counting whether the gate *accepted*
+  a result, never whether the artist was right. Roughly a third of those
+  acceptances were impostor accounts. When quoting a hit rate here, say what it
+  counted. Every candidate passes the same confidence
   gate as `spotifyenrich` (`purchase.Accept`/`Score`, built on `internal/match`,
   plus a `SubjectFloor` on top of `Threshold`) because a store's search will
   happily return a real but wrong album for a same-artist query (iTunes answers
@@ -194,7 +207,19 @@ errcheck findings CI caught).
   correct match lost. This only shows up for well-known artists — nobody
   uploads an impostor "Slow Glows" page — which is why the original 47%
   sampling in #50 missed it entirely (that number counted acceptance, never
-  identity). iTunes results are accepted only when
+  identity). The full-hub run afterwards put the real rate at 34%.
+
+  **A cached result predates any later matching fix.** `purchase_cache` stores
+  the resolved URL, so a hit short-circuits the source entirely — gate, identity
+  check and all. After the artist-identity fix landed, a full Bandcamp run still
+  re-applied three impostor links, because those albums had been cached by a
+  test run made *before* the fix existed. Clear a tier's cache
+  (`resolve cache clear --source <tier>`, or `--reresolve`) after any change to
+  how that tier matches, or the change silently will not apply to anything
+  already cached. Note `ClearPurchaseSource` wipes the tier's whole key space,
+  misses included, so the next run re-queries everything it previously skipped.
+
+  iTunes results are accepted only when
   the album carries a real price — iTunes Store downloads are DRM-free, but a
   `music.apple.com` link with no price is an Apple Music *stream*, not a
   purchase. Discogs is a two-step lookup: its search response's `title` is an
