@@ -48,9 +48,9 @@ func TestPurchasePaceForSource(t *testing.T) {
 	}{
 		{"bandcamp", time.Second},
 		{"itunes", 3 * time.Second},
-		{"discogs", 2400 * time.Millisecond},
+		{"discogs", 4900 * time.Millisecond}, // two requests per lookup
 	} {
-		if got := purchasePaceFor(tc.name, 0); got < tc.min {
+		if got := purchasePaceFor(tc.name, 0, false); got < tc.min {
 			t.Errorf("pace for %s = %v, want >= %v", tc.name, got, tc.min)
 		}
 	}
@@ -58,10 +58,10 @@ func TestPurchasePaceForSource(t *testing.T) {
 
 // An explicit --delay raises the floor but must never go below the source's own.
 func TestPurchasePaceForRespectsFloor(t *testing.T) {
-	if got := purchasePaceFor("itunes", 10*time.Millisecond); got < 3*time.Second {
+	if got := purchasePaceFor("itunes", 10*time.Millisecond, false); got < 3*time.Second {
 		t.Errorf("pace = %v, want the source floor to win over a smaller --delay", got)
 	}
-	if got := purchasePaceFor("bandcamp", 5*time.Second); got != 5*time.Second {
+	if got := purchasePaceFor("bandcamp", 5*time.Second, false); got != 5*time.Second {
 		t.Errorf("pace = %v, want the larger explicit delay to win", got)
 	}
 }
@@ -117,5 +117,41 @@ func TestEveryPurchaseTierHasMarkers(t *testing.T) {
 		if len(purchaseSourceMarkers[name]) == 0 {
 			t.Errorf("tier %q has no purchaseSourceMarkers entry", name)
 		}
+	}
+}
+
+// A Discogs lookup makes two HTTP requests (search, then the release endpoint),
+// so the per-lookup floor must be twice the per-request gap. Pacing it as one
+// request ran a live sample at ~48 req/min against a 25/min limit and drew
+// HTTP 429s, which the consecutive-error breaker would turn into an aborted
+// tier mid-run.
+func TestPurchasePaceForCountsRequestsPerLookup(t *testing.T) {
+	single := purchasePaceFor("bandcamp", 0, false)
+	if want := purchaseSourceRequestGap["bandcamp"]; single != want {
+		t.Errorf("bandcamp pace = %v, want %v (one request per lookup)", single, want)
+	}
+	two := purchasePaceFor("discogs", 0, false)
+	if want := 2 * purchaseSourceRequestGap["discogs"]; two != want {
+		t.Errorf("discogs pace = %v, want %v (two requests per lookup)", two, want)
+	}
+	if two < 4800*time.Millisecond {
+		t.Errorf("discogs pace %v is under 25 req/min for a two-request lookup", two)
+	}
+}
+
+// A token raises Discogs to 60 req/min, so the floor drops — but still doubles
+// for the second request.
+func TestPurchasePaceForDiscogsToken(t *testing.T) {
+	unauth := purchasePaceFor("discogs", 0, false)
+	authed := purchasePaceFor("discogs", 0, true)
+	if authed >= unauth {
+		t.Errorf("authenticated pace %v should be shorter than unauthenticated %v", authed, unauth)
+	}
+	if want := 2 * discogsAuthedRequestGap; authed != want {
+		t.Errorf("authenticated discogs pace = %v, want %v", authed, want)
+	}
+	// 60 req/min with two requests per lookup means no faster than ~2s/lookup.
+	if authed < 2*time.Second {
+		t.Errorf("authenticated pace %v exceeds 60 req/min for a two-request lookup", authed)
 	}
 }

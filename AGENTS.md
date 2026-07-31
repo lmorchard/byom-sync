@@ -214,7 +214,12 @@ errcheck findings CI caught).
   now carries the real absolute form (a fixture captured from the wrong endpoint
   is what let the bug ship).
   `discogs_token` (optional, a viper default in `cmd/root.go`, not
-  `internal/config`) raises Discogs from 25 to 60 req/min. Rate pacing and the
+  `internal/config`) raises Discogs from 25 to 60 req/min. **Pace floors are
+  per *lookup*, but Discogs makes two requests per lookup**, so its floor is
+  double the per-request gap (`purchaseSourceRequestsPerLookup`). Pacing it as
+  one request ran a live sample at ~48 req/min against a 25/min limit and drew
+  HTTP 429s — which `Resolve` counts as errors, so the consecutive-error
+  breaker would abort the tier mid-run. Rate pacing and the
   consecutive-error streak live in a `purchase.Tier` the caller creates once per
   tier and passes to every per-file `Resolve` call — call-local state would leave
   the first lookup of every hub file unpaced and would never accumulate a streak.

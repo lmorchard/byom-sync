@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -342,22 +343,53 @@ var purchaseTierOrder = []string{"bandcamp", "itunes", "discogs"}
 
 // purchaseSourcePaces are each store's own floor. A single --delay cannot
 // express three different rate limits, so --delay acts only as an extra floor.
-var purchaseSourcePaces = map[string]time.Duration{
+// purchaseSourceRequestGap is the minimum gap between individual HTTP requests
+// to a source.
+var purchaseSourceRequestGap = map[string]time.Duration{
 	"bandcamp": 1100 * time.Millisecond, // undocumented endpoint — stay polite
 	"itunes":   3100 * time.Millisecond, // ~20 req/min
 	"discogs":  2500 * time.Millisecond, // 25 req/min unauthenticated
+}
+
+// discogsAuthedRequestGap is the gap once a discogs_token raises the limit to
+// 60 req/min.
+const discogsAuthedRequestGap = 1050 * time.Millisecond
+
+// purchaseSourceRequestsPerLookup is how many HTTP requests one Lookup can make.
+// The pace floor is applied per *lookup* by purchase.Resolve, so a source that
+// issues two requests per lookup needs twice the gap to stay under a
+// per-request rate limit.
+//
+// Discogs is the reason this exists. Its two-step lookup (search, then the
+// release endpoint for authoritative fields and num_for_sale) was paced as if
+// it made one request, so a real pass ran at up to 48 req/min against a 25/min
+// limit. A live sample got HTTP 429s partway through — and because Resolve
+// treats those as errors, the consecutive-error breaker would have aborted the
+// tier mid-run.
+var purchaseSourceRequestsPerLookup = map[string]int{
+	"bandcamp": 1,
+	"itunes":   1,
+	"discogs":  2,
 }
 
 // purchaseSourceMarkers identify which tier produced an existing purchase_url,
 // so --reresolve can drop that tier's links without touching the others'. The
 // hub stores only the URL, so the store has to be recognised from it.
 //
-// Matched as a substring of the whole URL rather than by parsing out the host,
-// deliberately: the point of --reresolve is recovering from links a tier got
-// wrong, and a malformed URL has no host a parser would recognise. byom-sync
-// itself once emitted "https://www.discogs.comhttps://www.discogs.com/release/…",
-// whose parsed host is "www.discogs.comhttps" — a host-suffix check would leave
-// exactly the links that most need clearing.
+// Matched against the URL's *host* only, and by substring rather than suffix.
+// Both halves of that are deliberate:
+//
+//   - Host only, because the marker can legitimately appear elsewhere in a
+//     hand-authored URL — "https://duckduckgo.com/?q=bandcamp.com+x" is not a
+//     Bandcamp link and must survive a --reresolve of the bandcamp tier.
+//   - Substring rather than suffix, because the point of --reresolve is
+//     recovering from links a tier got wrong. byom-sync itself once emitted
+//     "https://www.discogs.comhttps://www.discogs.com/release/…", whose parsed
+//     host is "www.discogs.comhttps" — a suffix check would leave exactly the
+//     links that most need clearing.
+//
+// A URL that will not parse at all falls back to whole-string matching, since
+// there is no host to inspect and it is still a link some tier wrote.
 var purchaseSourceMarkers = map[string][]string{
 	"bandcamp": {"bandcamp.com"},
 	"itunes":   {"music.apple.com", "itunes.apple.com"},
@@ -378,15 +410,28 @@ func clearPurchaseURLs(p *playlist.Playlist, source string) int {
 		if u == "" {
 			continue
 		}
-		for _, m := range markers {
-			if strings.Contains(u, m) {
-				p.Tracks[i].PurchaseURL = ""
-				n++
-				break
-			}
+		if matchesPurchaseSource(u, markers) {
+			p.Tracks[i].PurchaseURL = ""
+			n++
 		}
 	}
 	return n
+}
+
+// matchesPurchaseSource reports whether a stored purchase_url was produced by
+// the tier owning markers. See purchaseSourceMarkers for why this looks at the
+// host by substring, and why an unparseable URL falls back to the whole string.
+func matchesPurchaseSource(rawURL string, markers []string) bool {
+	hay := rawURL
+	if u, err := url.Parse(rawURL); err == nil && u.Host != "" {
+		hay = u.Host
+	}
+	for _, m := range markers {
+		if strings.Contains(hay, m) {
+			return true
+		}
+	}
+	return false
 }
 
 // purchaseSourcesFor builds the tier list for a --source value. "all" is the
@@ -425,8 +470,16 @@ func purchaseSourcesFor(name, discogsToken string) ([]purchase.Source, error) {
 
 // purchasePaceFor returns the larger of the source's own floor and an explicit
 // --delay, so a user can slow a tier down but never speed it past its limit.
-func purchasePaceFor(name string, explicit time.Duration) time.Duration {
-	pace := purchaseSourcePaces[name]
+func purchasePaceFor(name string, explicit time.Duration, authenticated bool) time.Duration {
+	gap := purchaseSourceRequestGap[name]
+	if name == "discogs" && authenticated {
+		gap = discogsAuthedRequestGap
+	}
+	n := purchaseSourceRequestsPerLookup[name]
+	if n < 1 {
+		n = 1
+	}
+	pace := time.Duration(n) * gap
 	if explicit > pace {
 		return explicit
 	}
@@ -510,7 +563,7 @@ func runResolvePurchase(ctx context.Context) error {
 			b := purchaseLimit
 			budget = &b
 		}
-		pace := purchasePaceFor(src.Name(), purchaseDelay)
+		pace := purchasePaceFor(src.Name(), purchaseDelay, viper.GetString("discogs_token") != "")
 		// Pacing and the consecutive-error streak belong to the source, not to
 		// one file. Resolve runs once per file, so without this shared state the
 		// first lookup in every file would go out unpaced — most lookups, once
@@ -525,6 +578,9 @@ func runResolvePurchase(ctx context.Context) error {
 			log.Warnf("--reresolve: cleared %d cached %s row(s)", cleared, src.Name())
 		}
 
+		// tierFilled counts tracks: one album lookup fills every track on that
+		// album. tierMissed counts lookups, which are albums — except for a
+		// track with no album, which is its own lookup.
 		var tierFilled, tierMissed, tierFiles, tierDropped int
 		stoppedOnErrors := false
 		for _, path := range paths {
@@ -538,7 +594,7 @@ func runResolvePurchase(ctx context.Context) error {
 			if purchaseReresolve {
 				if dropped := clearPurchaseURLs(&p, src.Name()); dropped > 0 {
 					tierDropped += dropped
-					log.Debugf("  %s: dropped %d existing %s link(s) for re-resolution", base, dropped, src.Name())
+					log.Debugf("  %s: dropped %d existing %s track link(s) for re-resolution", base, dropped, src.Name())
 				}
 			}
 
@@ -590,15 +646,15 @@ func runResolvePurchase(ctx context.Context) error {
 			}
 		}
 		if tierDropped > 0 {
-			log.Warnf("tier %s: --reresolve dropped %d existing link(s) before re-running", src.Name(), tierDropped)
+			log.Warnf("tier %s: --reresolve dropped %d existing track link(s) before re-running", src.Name(), tierDropped)
 		}
 		how := "done"
 		if stoppedOnErrors {
 			how = "stopped early on errors"
 		}
-		log.Infof("tier %s: filled %d, missed %d across %d file(s) (%s)", src.Name(), tierFilled, tierMissed, tierFiles, how)
+		log.Infof("tier %s: filled %d track(s), missed %d album(s) across %d file(s) (%s)", src.Name(), tierFilled, tierMissed, tierFiles, how)
 	}
-	log.Warnf("purchase resolve done: %d link(s) filled", total)
+	log.Warnf("purchase resolve done: %d track(s) filled", total)
 	return nil
 }
 
