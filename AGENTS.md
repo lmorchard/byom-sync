@@ -39,6 +39,10 @@ YouTube resolution cache in `internal/rcache/` — an index, not a source of tru
 - `internal/youtube/` — resolver chain: `resolver.go` (`Resolver`/`Chain`/`Result`),
   `ytdlp.go` (yt-dlp search + `IsEmbeddable`), `youtube.go` (Data API search),
   `resolve.go` (`Resolve` loop, `ResolveOptions`, `Cache` interface, TTL logic).
+- `internal/match/` — normalized string similarity shared by `spotifyenrich` and
+  `purchase`: `Norm` (token normalization) and `Sim` (partial-ratio edit
+  distance over normalized strings), extracted from `spotifyenrich/score.go` so
+  both packages score candidate matches identically.
 - `internal/spotifyenrich/` — reverse enrichment: `score.go` (`Candidate`,
   `Score`, similarity), `search.go` (`Searcher`/`ClientSearcher`, `buildQuery`,
   `toCandidate`, image pick), `enrich.go` (`Enrich` loop, `Options`, `Event`,
@@ -52,10 +56,21 @@ YouTube resolution cache in `internal/rcache/` — an index, not a source of tru
   req/sec pacing.
 - `internal/artstore/` — content-addressed cover-art download store: `artstore.go`
   (`Store.Save`/`Load` for persistent local art with dedup by image bytes).
-- `internal/rcache/` — SQLite cache with three tables in one `cache.db`:
-  `resolution_cache` (YouTube), `enrichment_cache` (Spotify), and `art_cache`
-  (cover art: `ArtEntry`, `GetArt`/`PutArt`). `Stats`/`EnrichStats`/`ArtStats`
-  and `Clear` span all three; keyed by `Track.Key()`; gitignored, disposable.
+- `internal/purchase/` — purchase-link resolution: `types.go` (`Query`/`Result`/
+  `Source`/`Kind`, `Score`/`Accept` confidence gate, `Threshold`/`SubjectFloor`),
+  `bandcamp.go`, `itunes.go`, `discogs.go` (the three tiers — see "Purchase
+  links" below), `resolve.go` (`Resolve` loop, `Options`, `Event`, `Cache`,
+  one-lookup-fills-every-track-on-the-album fan-out). No MusicBrainz source: it
+  was measured and excluded (see below).
+- `internal/rcache/` — SQLite cache with four tables in one `cache.db`:
+  `resolution_cache` (YouTube), `enrichment_cache` (Spotify), `art_cache`
+  (cover art: `ArtEntry`, `GetArt`/`PutArt`), and `purchase_cache` (purchase
+  links: `PurchaseEntry`, `GetPurchase`/`PutPurchase`, `ClearPurchaseSource` to
+  wipe one tier's rows without discarding the others'). `Stats`/`EnrichStats`/
+  `ArtStats`/`PurchaseStats` and `Clear` span all four; the first three key by
+  `Track.Key()`, but purchase keys by `Query.CacheKey(source)` (source+kind+
+  normalized artist+subject) since a tier-1 miss must not block tier 2 from
+  trying the same album. Gitignored, disposable.
 - `internal/config/`, `internal/templates/` (embedded Markdown template).
 - `internal/site/` — the static site generator (`byom-sync site`): recursive
   hub walk → per-playlist JSPF + HTML pages embedding `<byom-player>`,
@@ -117,8 +132,8 @@ errcheck findings CI caught).
   *remote* playlist (`out := remote`), so anything Spotify doesn't send back is
   blank unless explicitly carried over. `Merge` copies playlist-level `featured` +
   hero art, and `adoptLocalFields` copies each surviving track's `youtube_id`,
-  `image_file`, `spotify` opt-out, and `enrich_candidates`; `Image` is the one
-  field where remote wins when non-empty. Without this, a single sync wiped every
+  `image_file`, `purchase_url`, `spotify` opt-out, and `enrich_candidates`;
+  `Image` is the one field where remote wins when non-empty. Without this, a single sync wiped every
   `resolve` result — on the live hub that was 8292 `youtube_id`s and 8318
   `image_file`s in one playlist, silently, with a zero exit code. When you add a
   locally-derived field to `Playlist` or `Track`, add it here too, or sync will
@@ -155,8 +170,33 @@ errcheck findings CI caught).
   own `spotify_id` and re-running. Set `spotify: false` on a track (a `*bool`:
   absent/`true` = enrich, `false` = opt out) to assert it has no Spotify
   equivalent — `resolve spotify` then skips it and clears any stale candidates.
-  Recommended pipeline order:
-  author/`sync` → `resolve spotify` → `resolve art` → `resolve youtube` → `export`.
+  Recommended pipeline order: author/`sync` → `resolve spotify` → `resolve art`
+  → `resolve purchase` → `resolve youtube` → `export`.
+- **Purchase links:** `resolve purchase` fills `Track.PurchaseURL` with a
+  best-effort "where to buy this" link, running the tiers below in order, each
+  a full pass over whatever the previous tier left unresolved: Bandcamp (~47%
+  of all hub albums, one request each, DRM-free) → iTunes (~65% of what
+  Bandcamp missed) → Discogs (~39% of what's left, 2 albums unique to it in the
+  measured hub) — ~85% cumulative. Every candidate passes the same confidence
+  gate as `spotifyenrich` (`purchase.Accept`/`Score`, built on `internal/match`,
+  plus a `SubjectFloor` on top of `Threshold`) because a store's search will
+  happily return a real but wrong album for a same-artist query (iTunes answers
+  "Theatre Is Evil" with "Piano Is Evil"). iTunes results are accepted only when
+  the album carries a real price — iTunes Store downloads are DRM-free, but a
+  `music.apple.com` link with no price is an Apple Music *stream*, not a
+  purchase. Discogs is a two-step lookup: its search response's `title` is an
+  unreliable "Artist - Album" string with no availability signal, so a
+  candidate that clears a first-pass rank spends a second request on the
+  release endpoint for authoritative artist/title fields plus `num_for_sale`
+  (zero for sale is a dead link, rejected) — and even a live listing is
+  secondhand physical media, which doesn't fill a gap in a digital collection
+  unless the record is ripped, hence last tier. MusicBrainz was measured as a
+  fourth source and dropped: 3% hit rate, zero contribution unique to it.
+  `discogs_token` (optional, a viper default in `cmd/root.go`, not
+  `internal/config`) raises Discogs from 25 to 60 req/min. A cold fill across a
+  ~7,165-album hub runs roughly 6 hours (~2h Bandcamp, ~3.2h iTunes, 30–75min
+  Discogs); incremental and resumable, and stopping after the Bandcamp tier
+  alone is a reasonable outcome — cheapest pass, best links.
 - **Cover art:** `Track.Image` (album cover URL) is populated by `sync` (album art
   captured at fetch), `resolve spotify` (enrichment from Spotify search response),
   or `resolve art` (MusicBrainz/Cover Art Archive fill). `resolve art` is Spotify-first:
@@ -173,7 +213,7 @@ errcheck findings CI caught).
   (hub-relative; `Image` stays the source URL).
   `export jspf --embed-art` inlines those local copies as `data:` URLs for a
   self-contained file (run `--download` first; network-free). Pipeline: `resolve
-  spotify` → `resolve art` → `resolve youtube` → `export`.
+  spotify` → `resolve art` → `resolve purchase` → `resolve youtube` → `export`.
 - **Exporters:** m3u8 builds `{prefix}/{Artist}/{Album}/{Title}.{ext}` paths
   verbatim; jspf uses `urn:isrc:` identifiers (or a synthesized
   `urn:byom:<sha1(ContentKey)>` when a track has no ISRC, so every track is

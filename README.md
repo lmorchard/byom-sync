@@ -85,6 +85,10 @@ playlists:
 # cache_path: ""          # default: $XDG_CONFIG_HOME/byom-sync/cache.db
 # cache_miss_ttl: "720h"  # re-attempt an unmatched track after this long
 # cache_embed_ttl: "720h" # re-verify a cached embeddable id after this long
+
+# Discogs API token (optional; see "Resolve purchase links").
+# Without one, Discogs lookups are limited to 25 req/min; with one, 60 req/min.
+# discogs_token: ""
 ```
 
 The OAuth token is cached separately at
@@ -170,18 +174,21 @@ emitted as-is; the files aren't checked against the filesystem.
 ### Enrich everything at once
 
 ```sh
-# Full pipeline over one playlist: spotify -> art -> youtube
+# Full pipeline over one playlist: spotify -> art -> purchase -> youtube
 byom-sync resolve all --input playlists/00-conceptual/my-mixtape.yaml
 
 # Skip a stage (also skips its prerequisite check)
 byom-sync resolve all --skip-youtube
+byom-sync resolve all --skip-purchase
 ```
 
-`resolve all` runs the three enrichment stages in dependency order — the Spotify
+`resolve all` runs the four enrichment stages in dependency order — the Spotify
 stage writes the ISRCs that the art and YouTube stages use as their cache
-identity. Prerequisites for every enabled stage (a cached Spotify token, `yt-dlp`
-on `PATH`) are checked *before* any stage runs, so a missing tool is reported
-immediately rather than after a long art crawl.
+identity. The purchase stage has no such dependency (it only reads
+artist/album/title); it runs third here just to keep shopping metadata grouped
+near cover art. Prerequisites for every enabled stage (a cached Spotify token,
+`yt-dlp` on `PATH`) are checked *before* any stage runs, so a missing tool is
+reported immediately rather than after a long art crawl.
 
 `--download` defaults to true here, unlike `resolve art`. A missing Spotify token
 is fatal here rather than degrading to MusicBrainz-only art; run `resolve art`
@@ -230,6 +237,55 @@ byom-sync resolve cache clear                 # wipe everything
 # Bypass the cache for one run (pure network resolution)
 byom-sync resolve youtube --no-cache
 ```
+
+### Resolve purchase links
+
+Fill in a `purchase_url` for hub albums that lack one — a best-effort "where to
+buy this" link, e.g. for a shopping list. Three tiers run in order, each a full
+pass over whatever the previous tier left unresolved:
+
+1. **Bandcamp** — one request per album against Bandcamp's own search endpoint.
+   Artist-friendly, DRM-free links, and the best hit rate: ~47% of all hub
+   albums.
+2. **iTunes** — the iTunes Search API. Fills ~65% of what Bandcamp missed.
+   Accepted only when the result carries a real price: iTunes Store downloads
+   are DRM-free, but a `music.apple.com` link with no price is an Apple Music
+   *stream*, not a purchase.
+3. **Discogs** — marketplace search + release lookup, accepted only when copies
+   are actually listed for sale. Fills ~39% of what's left (2 albums unique to
+   this tier in the measured hub). A Discogs link is secondhand physical media
+   — it doesn't fill a gap in a digital collection unless the record gets
+   ripped, which is why it runs last.
+
+Cumulative hit rate across all three tiers is roughly 85%. Every match passes a
+confidence gate before being accepted, since a store's search will happily
+return a real but wrong album for a same-artist query.
+
+(MusicBrainz was evaluated as a fourth source and dropped: it measured a 3% hit
+rate with zero contribution unique to it.)
+
+```sh
+# Fill missing purchase links across the hub (all three tiers)
+byom-sync resolve purchase --input ./playlists
+
+# Run just one tier, e.g. to catch up Discogs alone after adding a token
+byom-sync resolve purchase --source discogs
+
+# Cap network lookups this run; add an extra pacing floor beyond each store's own
+byom-sync resolve purchase --limit 200 --delay 2s
+```
+
+`--source` selects `all` (default, the full cascade) or a single tier
+(`bandcamp`, `itunes`, `discogs`). `--limit` caps lookups *per tier* per run;
+`--delay` is an extra floor on top of each store's own rate limit (Bandcamp
+~1/sec, iTunes ~20/min, Discogs 25/min — or 60/min with `discogs_token`, an
+optional config setting that isn't otherwise required).
+
+A cold fill across a hub of ~7,165 albums takes roughly 6 hours: ~2h for
+Bandcamp, ~3.2h for iTunes, 30–75 minutes for Discogs. Like the other resolve
+commands it's incremental and resumable, so stopping after the Bandcamp tier
+alone is a reasonable outcome — it's the cheapest pass and gives the links most
+worth having.
 
 ### Generate a static site
 
@@ -295,6 +351,7 @@ tracks:
     spotify_id: "1a2b3c..."
     spotify_url: "https://open.spotify.com/track/1a2b3c..."
     duration_ms: 354000
+    purchase_url: "https://artist.bandcamp.com/album/album-name"  # from `resolve purchase`
     added_at: "2026-05-29T04:02:20Z"    # when it was added to the playlist
     sync_state:
       spotify_present: true
