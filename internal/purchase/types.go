@@ -6,7 +6,9 @@ package purchase
 
 import (
 	"context"
+	"net/http"
 	"strings"
+	"time"
 
 	"github.com/lmorchard/byom-sync/internal/match"
 	"github.com/lmorchard/byom-sync/internal/spotifyenrich"
@@ -130,3 +132,16 @@ func Accept(q Query, artist, album string) (score float64, ok bool) {
 // userAgent identifies byom-sync to the stores. Discogs rejects default agents
 // outright; the others are simply better behaved with a real one.
 const userAgent = "byom-sync (+https://github.com/lmorchard/byom-sync)"
+
+// requestTimeout bounds a single store request. http.DefaultClient has no
+// timeout at all, so one hung connection would stall a pass that is expected to
+// run for hours — indefinitely, with no output. 20s is generous next to the
+// stores' observed sub-second responses while still tolerating a slow one.
+const requestTimeout = 20 * time.Second
+
+// defaultHTTPClient is what a source uses when the caller passes nil. Each call
+// returns a fresh client so the sources don't share a connection pool across
+// three different hosts, but they all get the same timeout.
+func defaultHTTPClient() *http.Client {
+	return &http.Client{Timeout: requestTimeout}
+}

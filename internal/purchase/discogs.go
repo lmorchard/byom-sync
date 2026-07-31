@@ -37,7 +37,7 @@ type Discogs struct {
 // is optional: without one the rate limit is 25/min, with one 60/min.
 func NewDiscogs(client *http.Client, baseURL, token string) *Discogs {
 	if client == nil {
-		client = http.DefaultClient
+		client = defaultHTTPClient()
 	}
 	if baseURL == "" {
 		baseURL = discogsAPI

@@ -1,6 +1,9 @@
 package purchase
 
-import "testing"
+import (
+	"net/http"
+	"testing"
+)
 
 func TestQueryKind(t *testing.T) {
 	if got := (Query{Artist: "A", Album: "B"}).Kind(); got != KindAlbum {
@@ -106,6 +109,23 @@ func TestAccept(t *testing.T) {
 		if _, ok := Accept(tc.q, tc.artist, tc.album); ok {
 			t.Errorf("Accept(%q/%q vs %q/%q) = true, want false",
 				tc.q.Artist, tc.q.Album, tc.artist, tc.album)
+		}
+	}
+}
+
+// Every source must default to a client with a timeout: http.DefaultClient has
+// none, and one hung connection would stall a multi-hour pass indefinitely.
+func TestSourcesDefaultToATimeoutClient(t *testing.T) {
+	for name, got := range map[string]*http.Client{
+		"bandcamp": NewBandcamp(nil, "").client,
+		"itunes":   NewITunes(nil, "").client,
+		"discogs":  NewDiscogs(nil, "", "").client,
+	} {
+		if got == http.DefaultClient {
+			t.Errorf("%s: uses http.DefaultClient, which has no timeout", name)
+		}
+		if got.Timeout <= 0 {
+			t.Errorf("%s: client timeout = %v, want > 0", name, got.Timeout)
 		}
 	}
 }

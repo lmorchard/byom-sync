@@ -27,7 +27,7 @@ type Bandcamp struct {
 // tests inject an httptest URL.
 func NewBandcamp(client *http.Client, endpoint string) *Bandcamp {
 	if client == nil {
-		client = http.DefaultClient
+		client = defaultHTTPClient()
 	}
 	if endpoint == "" {
 		endpoint = bandcampEndpoint

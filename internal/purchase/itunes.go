@@ -26,7 +26,7 @@ type ITunes struct {
 // NewITunes returns an iTunes source. A zero endpoint means the real one.
 func NewITunes(client *http.Client, endpoint string) *ITunes {
 	if client == nil {
-		client = http.DefaultClient
+		client = defaultHTTPClient()
 	}
 	if endpoint == "" {
 		endpoint = itunesEndpoint
