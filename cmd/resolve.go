@@ -343,10 +343,33 @@ var purchaseTierOrder = []string{"bandcamp", "itunes", "discogs"}
 
 // purchaseSourcePaces are each store's own floor. A single --delay cannot
 // express three different rate limits, so --delay acts only as an extra floor.
-var purchaseSourcePaces = map[string]time.Duration{
+// purchaseSourceRequestGap is the minimum gap between individual HTTP requests
+// to a source.
+var purchaseSourceRequestGap = map[string]time.Duration{
 	"bandcamp": 1100 * time.Millisecond, // undocumented endpoint — stay polite
 	"itunes":   3100 * time.Millisecond, // ~20 req/min
 	"discogs":  2500 * time.Millisecond, // 25 req/min unauthenticated
+}
+
+// discogsAuthedRequestGap is the gap once a discogs_token raises the limit to
+// 60 req/min.
+const discogsAuthedRequestGap = 1050 * time.Millisecond
+
+// purchaseSourceRequestsPerLookup is how many HTTP requests one Lookup can make.
+// The pace floor is applied per *lookup* by purchase.Resolve, so a source that
+// issues two requests per lookup needs twice the gap to stay under a
+// per-request rate limit.
+//
+// Discogs is the reason this exists. Its two-step lookup (search, then the
+// release endpoint for authoritative fields and num_for_sale) was paced as if
+// it made one request, so a real pass ran at up to 48 req/min against a 25/min
+// limit. A live sample got HTTP 429s partway through — and because Resolve
+// treats those as errors, the consecutive-error breaker would have aborted the
+// tier mid-run.
+var purchaseSourceRequestsPerLookup = map[string]int{
+	"bandcamp": 1,
+	"itunes":   1,
+	"discogs":  2,
 }
 
 // purchaseSourceMarkers identify which tier produced an existing purchase_url,
@@ -447,8 +470,16 @@ func purchaseSourcesFor(name, discogsToken string) ([]purchase.Source, error) {
 
 // purchasePaceFor returns the larger of the source's own floor and an explicit
 // --delay, so a user can slow a tier down but never speed it past its limit.
-func purchasePaceFor(name string, explicit time.Duration) time.Duration {
-	pace := purchaseSourcePaces[name]
+func purchasePaceFor(name string, explicit time.Duration, authenticated bool) time.Duration {
+	gap := purchaseSourceRequestGap[name]
+	if name == "discogs" && authenticated {
+		gap = discogsAuthedRequestGap
+	}
+	n := purchaseSourceRequestsPerLookup[name]
+	if n < 1 {
+		n = 1
+	}
+	pace := time.Duration(n) * gap
 	if explicit > pace {
 		return explicit
 	}
@@ -532,7 +563,7 @@ func runResolvePurchase(ctx context.Context) error {
 			b := purchaseLimit
 			budget = &b
 		}
-		pace := purchasePaceFor(src.Name(), purchaseDelay)
+		pace := purchasePaceFor(src.Name(), purchaseDelay, viper.GetString("discogs_token") != "")
 		// Pacing and the consecutive-error streak belong to the source, not to
 		// one file. Resolve runs once per file, so without this shared state the
 		// first lookup in every file would go out unpaced — most lookups, once
