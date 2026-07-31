@@ -549,8 +549,15 @@ discarding the others."
   - `(Query) Text() string` — the normalized free-text search string
   - `type Result struct { URL string; Kind Kind; Score float64 }`
   - `type Source interface { Name() string; Lookup(ctx context.Context, q Query) (Result, error) }`
-  - `func Score(q Query, artist, album string) float64`
+  - `func Score(q Query, artist, album string) float64` — the combined score
+  - `func Accept(q Query, artist, album string) (score float64, ok bool)` — the
+    single acceptance decision; sources call this, not `Score`
   - `const Threshold = spotifyenrich.DefaultThreshold`
+  - `const SubjectFloor = 0.70` — album/title similarity must clear this
+    independently. A perfect artist match plus coincidental title overlap
+    otherwise carries a wrong album over the combined threshold: measured,
+    "Theatre Is Evil" vs "Piano Is Evil" scores 0.808 combined on a 0.615
+    subject similarity. The floor is what rejects it.
   - `func FirstArtist(string) string`, `func CleanAlbum(string) string`
 
 - [ ] **Step 1: Write the failing tests**
@@ -1099,12 +1106,15 @@ func (b *Bandcamp) Lookup(ctx context.Context, q Query) (Result, error) {
 		if r.ItemURLPath == "" {
 			continue
 		}
-		s := Score(q, r.BandName, r.Name)
+		s, ok := Accept(q, r.BandName, r.Name)
+		if !ok {
+			continue // wrong record, or too weak a match to trust
+		}
 		if s > best.Score {
 			best.Score, best.URL = s, r.ItemURLPath
 		}
 	}
-	if best.Score < Threshold {
+	if best.URL == "" {
 		return Result{Kind: q.Kind()}, nil // clean miss
 	}
 	return best, nil
@@ -1379,12 +1389,15 @@ func (i *ITunes) Lookup(ctx context.Context, q Query) (Result, error) {
 		if link == "" || price <= 0 {
 			continue // stream-only or unpriced: not a purchase
 		}
-		s := Score(q, r.ArtistName, name)
+		s, ok := Accept(q, r.ArtistName, name)
+		if !ok {
+			continue
+		}
 		if s > best.Score {
 			best.Score, best.URL = s, link
 		}
 	}
-	if best.Score < Threshold {
+	if best.URL == "" {
 		return Result{Kind: q.Kind()}, nil
 	}
 	return best, nil
@@ -1684,6 +1697,9 @@ func (d *Discogs) Lookup(ctx context.Context, q Query) (Result, error) {
 		if album == "" {
 			album = r.Title
 		}
+		// First pass only ranks candidates, so it uses the raw combined score
+		// rather than Accept — the authoritative check happens below on the
+		// release lookup's clean fields.
 		if s := Score(q, artist, album); s > bestScore {
 			bestScore, bestResource = s, r.ResourceURL
 		}
@@ -1704,8 +1720,8 @@ func (d *Discogs) Lookup(ctx context.Context, q Query) (Result, error) {
 	for _, a := range rel.Artists {
 		names = append(names, a.Name)
 	}
-	score := Score(q, strings.Join(names, ", "), rel.Title)
-	if score < Threshold {
+	score, ok := Accept(q, strings.Join(names, ", "), rel.Title)
+	if !ok {
 		return Result{Kind: q.Kind()}, nil
 	}
 	if rel.URI == "" {
