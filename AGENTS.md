@@ -23,8 +23,8 @@ YouTube resolution cache in `internal/rcache/` — an index, not a source of tru
 ## Layout
 
 - `cmd/` — Cobra commands: `root`, `version`, `init`, `auth`, `sync`, `import`,
-  `export`, `resolve` (subcommands `all`, `youtube`, `spotify`, `art`, `prime`,
-  `cache stats`, `cache clear`), `site`, `dates`.
+  `export`, `resolve` (subcommands `all`, `youtube`, `spotify`, `art`, `purchase`,
+  `prime`, `cache stats`, `cache clear`), `site`, `dates`.
 - `internal/playlist/` — the hub: `types.go` (`Playlist`/`Track`/`SyncState`,
   `Track.Key()`), `store.go` (`HubPaths` — the canonical recursive hub walk, plus
   `Load`/`LoadFile`/`FindFileByID`/`Save`/`Slug`),
@@ -192,8 +192,24 @@ errcheck findings CI caught).
   secondhand physical media, which doesn't fill a gap in a digital collection
   unless the record is ripped, hence last tier. MusicBrainz was measured as a
   fourth source and dropped: 3% hit rate, zero contribution unique to it.
+  **Discogs `uri` trap:** the search response's `uri` is site-relative
+  (`/release/249504-…`) but the release resource's is absolute
+  (`https://www.discogs.com/release/249504-…`). `discogs.go` reads the release
+  resource, so it must *not* prefix the site; doing so emitted
+  `https://www.discogs.comhttps://www.discogs.com/release/…` for every hit.
+  `discogsPermalink` tolerates both shapes, and `testdata/discogs_release.json`
+  now carries the real absolute form (a fixture captured from the wrong endpoint
+  is what let the bug ship).
   `discogs_token` (optional, a viper default in `cmd/root.go`, not
-  `internal/config`) raises Discogs from 25 to 60 req/min. A cold fill across a
+  `internal/config`) raises Discogs from 25 to 60 req/min. Rate pacing and the
+  consecutive-error streak live in a `purchase.Tier` the caller creates once per
+  tier and passes to every per-file `Resolve` call — call-local state would leave
+  the first lookup of every hub file unpaced and would never accumulate a streak.
+  A tier stops with `purchase.StopErrors` after `maxConsecutiveErrors` failures
+  in a row; later tiers still run. `--reresolve` un-writes a tier's answers
+  (its cache rows via `rcache.ClearPurchaseSource`, plus every `purchase_url`
+  matching `cmd.purchaseSourceMarkers`) and resolves them fresh;
+  `resolve cache clear --source <tier>` does the cache half alone. A cold fill across a
   ~7,165-album hub runs roughly 6 hours (~2h Bandcamp, ~3.2h iTunes, 30–75min
   Discogs); incremental and resumable, and stopping after the Bandcamp tier
   alone is a reasonable outcome — cheapest pass, best links.

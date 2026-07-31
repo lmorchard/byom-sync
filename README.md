@@ -231,8 +231,9 @@ byom-sync resolve prime
 
 # Inspect coverage / clear entries
 byom-sync resolve cache stats
-byom-sync resolve cache clear --misses-only   # re-attempt unmatched tracks
-byom-sync resolve cache clear                 # wipe everything
+byom-sync resolve cache clear --misses-only     # re-attempt unmatched tracks
+byom-sync resolve cache clear --source discogs  # drop one purchase tier's rows
+byom-sync resolve cache clear                   # wipe everything
 
 # Bypass the cache for one run (pure network resolution)
 byom-sync resolve youtube --no-cache
@@ -273,6 +274,9 @@ byom-sync resolve purchase --source discogs
 
 # Cap network lookups this run; add an extra pacing floor beyond each store's own
 byom-sync resolve purchase --limit 200 --delay 2s
+
+# Un-write one tier's links and resolve them again from scratch
+byom-sync resolve purchase --source discogs --reresolve
 ```
 
 `--source` selects `all` (default, the full cascade) or a single tier
@@ -280,6 +284,16 @@ byom-sync resolve purchase --limit 200 --delay 2s
 `--delay` is an extra floor on top of each store's own rate limit (Bandcamp
 ~1/sec, iTunes ~20/min, Discogs 25/min — or 60/min with `discogs_token`, an
 optional config setting that isn't otherwise required).
+
+`--reresolve` is the recovery path for a tier that filled the hub with bad
+links: it drops that tier's cached rows, blanks every `purchase_url` in the hub
+pointing at that store, and resolves them fresh. Links the tier no longer finds
+stay gone, so pair it with `--source`. To drop only the cache and leave the hub
+alone, use `resolve cache clear --source <tier>`.
+
+Each tier also stops early if its lookups fail repeatedly in a row, rather than
+firing thousands more requests at a store that has started refusing them; the
+remaining tiers still run.
 
 A cold fill across a hub of ~7,165 albums takes roughly 6 hours: ~2h for
 Bandcamp, ~3.2h for iTunes, 30–75 minutes for Discogs. Like the other resolve

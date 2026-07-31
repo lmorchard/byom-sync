@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lmorchard/byom-sync/internal/playlist"
 	"github.com/lmorchard/byom-sync/internal/purchase"
 )
 
@@ -66,3 +67,55 @@ func TestPurchasePaceForRespectsFloor(t *testing.T) {
 }
 
 var _ purchase.Source = (*purchase.Bandcamp)(nil)
+
+// --reresolve has to un-write one tier's links without touching the others'.
+func TestClearPurchaseURLsIsSourceScoped(t *testing.T) {
+	p := &playlist.Playlist{Tracks: []playlist.Track{
+		{Title: "bc", PurchaseURL: "https://artist.bandcamp.com/album/x"},
+		{Title: "it", PurchaseURL: "https://music.apple.com/us/album/x/123"},
+		{Title: "dg", PurchaseURL: "https://www.discogs.com/release/1-X"},
+		{Title: "none"},
+	}}
+
+	if n := clearPurchaseURLs(p, "discogs"); n != 1 {
+		t.Errorf("cleared %d, want 1", n)
+	}
+	if p.Tracks[2].PurchaseURL != "" {
+		t.Error("the discogs link should have been cleared")
+	}
+	if p.Tracks[0].PurchaseURL == "" || p.Tracks[1].PurchaseURL == "" {
+		t.Error("other tiers' links must survive")
+	}
+}
+
+// The reason --reresolve exists: recovering from links a tier got wrong. A
+// malformed URL parses to a nonsense host, so the match must not depend on
+// parsing one out.
+func TestClearPurchaseURLsCatchesMalformedLinks(t *testing.T) {
+	p := &playlist.Playlist{Tracks: []playlist.Track{
+		{PurchaseURL: "https://www.discogs.comhttps://www.discogs.com/release/1-X"},
+	}}
+	if n := clearPurchaseURLs(p, "discogs"); n != 1 {
+		t.Fatalf("cleared %d, want 1 — a malformed link is exactly what needs clearing", n)
+	}
+}
+
+func TestClearPurchaseURLsUnknownSource(t *testing.T) {
+	p := &playlist.Playlist{Tracks: []playlist.Track{{PurchaseURL: "https://example.com/x"}}}
+	if n := clearPurchaseURLs(p, "napster"); n != 0 {
+		t.Errorf("cleared %d, want 0 for an unknown source", n)
+	}
+	if p.Tracks[0].PurchaseURL == "" {
+		t.Error("an unknown source must not clear anything")
+	}
+}
+
+// Every tier that can be selected must be recognisable from the URLs it writes,
+// or --reresolve would silently do nothing for it.
+func TestEveryPurchaseTierHasMarkers(t *testing.T) {
+	for _, name := range purchaseTierOrder {
+		if len(purchaseSourceMarkers[name]) == 0 {
+			t.Errorf("tier %q has no purchaseSourceMarkers entry", name)
+		}
+	}
+}
