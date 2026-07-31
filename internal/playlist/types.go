@@ -78,7 +78,11 @@ type Track struct {
 	// ImageFile is a hub-relative path to a downloaded local copy of the cover
 	// (from `resolve art --download`); Image stays as the source URL.
 	ImageFile string `yaml:"image_file,omitempty"`
-	AddedAt   string `yaml:"added_at,omitempty"`
+	// PurchaseURL is a best-effort "where to buy this" link filled by
+	// `resolve purchase` (Bandcamp, iTunes, or Discogs). Locally derived —
+	// Spotify has no equivalent — so it must be carried in adoptLocalFields.
+	PurchaseURL string `yaml:"purchase_url,omitempty"`
+	AddedAt     string `yaml:"added_at,omitempty"`
 	// Spotify is a tri-state opt-out for enrichment. nil (field absent) or true
 	// means "enrich normally"; false ("spotify: false") asserts the track has no
 	// Spotify equivalent, so `resolve spotify` skips it. A pointer so an explicit
