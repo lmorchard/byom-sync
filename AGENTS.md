@@ -177,19 +177,29 @@ errcheck findings CI caught).
   a full pass over whatever the previous tier left unresolved: Bandcamp →
   iTunes → Discogs.
 
-  **Hit rates, measured on the live hub, not sampled.** Bandcamp **34%** (2,358
-  of 7,025 distinct albums, after the artist-identity check). iTunes **66%** of
-  what Bandcamp left (3,110 of 4,690). Together that is **78% of distinct
-  albums** and **83% of tracks** — 5,707 of 7,292 albums, 11,655 of 14,119
-  tracks. Discogs has not been run at volume; its **~39%** is still a ~30-album
-  sample and should be treated as such.
+  **Hit rates, measured on the live hub, not sampled.** All three tiers have run
+  over a ~14k-track hub: Bandcamp **34%** of all albums, iTunes **66%** of what
+  Bandcamp left, Discogs **~26%** of what both missed. Cumulatively **85% of
+  distinct albums** (6,236 of 7,316) and **90% of tracks** (12,690 of 14,155).
 
-  Two notes on how these numbers moved. Bandcamp was documented at 47% until a
-  full run showed 34%: the 47% counted whether the gate *accepted* a result,
-  never whether the artist was right, and roughly a third of those acceptances
-  were impostor accounts. iTunes' sampled 65% did hold up at volume. The old
-  "~85% cumulative" was arithmetic over three numbers, one of which was wrong;
-  the 78% above is measured.
+  Three of these numbers were wrong before they were measured, in two different
+  ways, and both are worth knowing about before quoting a rate here.
+
+  Bandcamp was documented at 47% until a full run showed 34%: the 47% counted
+  whether the gate *accepted* a result, never whether the artist was right, and
+  roughly a third of those acceptances were impostor accounts. **Say what a hit
+  rate counted.**
+
+  Discogs was predicted to add "40-70 albums" and added **365**. That estimate
+  came from its *unique* contribution in a 31-album sample — the albums iTunes
+  didn't also find — which is a different quantity from coverage of the real
+  residue. And the residue is exactly Discogs' strength: albums both digital
+  stores missed are disproportionately out-of-print, vinyl-only, compilations,
+  and never-digitised releases. **An overlap statistic is not a coverage
+  prediction.**
+
+  iTunes' sampled 65% did hold at 66%. The samples that measured the right
+  quantity predicted the population fine.
 
   An earlier "~47%" for Bandcamp came from counting whether the gate *accepted*
   a result, never whether the artist was right. Roughly a third of those
