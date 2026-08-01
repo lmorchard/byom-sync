@@ -246,19 +246,22 @@ buy this" link, e.g. for a shopping list. Three tiers run in order, each a full
 pass over whatever the previous tier left unresolved:
 
 1. **Bandcamp** — one request per album against Bandcamp's own search endpoint.
-   Artist-friendly, DRM-free links, and the best hit rate: ~47% of all hub
-   albums.
-2. **iTunes** — the iTunes Search API. Fills ~65% of what Bandcamp missed.
+   Artist-friendly, DRM-free links. Measured at **34%** of all hub albums.
+2. **iTunes** — the iTunes Search API. Measured at **66%** of what Bandcamp
+   missed.
    Accepted only when the result carries a real price: iTunes Store downloads
    are DRM-free, but a `music.apple.com` link with no price is an Apple Music
    *stream*, not a purchase.
 3. **Discogs** — marketplace search + release lookup, accepted only when copies
-   are actually listed for sale. Fills ~39% of what's left (2 albums unique to
-   this tier in the measured hub). A Discogs link is secondhand physical media
+   are actually listed for sale. Fills **~26%** of what the other two missed —
+   365 releases on the reference hub, mostly out-of-print, vinyl-only and
+   compilation records the digital stores don't carry. A Discogs link is secondhand physical media
    — it doesn't fill a gap in a digital collection unless the record gets
    ripped, which is why it runs last.
 
-Cumulative hit rate across all three tiers is roughly 85%. Every match passes a
+**On those numbers.** All three are population figures from full runs over a real
+~14k-track hub, not samples — together **85% of distinct albums** (6,236 of
+7,316) and **90% of tracks** (12,690 of 14,155). Every match passes a
 confidence gate before being accepted, since a store's search will happily
 return a real but wrong album for a same-artist query.
 
