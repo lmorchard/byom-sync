@@ -217,7 +217,13 @@ func TestItemHTMLDecodesEncodedDescription(t *testing.T) {
 	if strings.Contains(body, "&amp;#x27;") {
 		t.Errorf("description is double-encoded: %s", body)
 	}
-	if !strings.Contains(body, "what&#39;s next &amp; why") {
+	// The apostrophe comes back bare rather than as &#39;: the renderer escapes
+	// the same four characters as byom-player (& < > "), so one description
+	// string looks identical in the feed and in the player. A bare ' is valid
+	// both in the CDATA of <content:encoded> and in the marshalled
+	// <description>. The ampersand is still escaped exactly once, which is what
+	// this test is really guarding.
+	if !strings.Contains(body, "what's next &amp; why") {
 		t.Errorf("description not decoded-then-escaped as expected: %s", body)
 	}
 }

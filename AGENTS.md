@@ -87,6 +87,22 @@ YouTube resolution cache in `internal/rcache/` — an index, not a source of tru
   it keeps its normal position in the year groups and nav tree as well.
   `site-index.json` is an object — `{"featured": [...], "children": [...]}` —
   with the featured list pre-sorted server-side.
+  Playlist descriptions are rendered as a tiny inline-markdown subset
+  (`internal/site/inlinemd.go`): `**bold**`, `*italic*`, `[text](url)`, and line
+  breaks — mirroring byom-player's `src/markdown.ts`, which applies the same
+  grammar to the JSPF `annotation`. One description string therefore looks the
+  same on the playlist page (rendered by the player), in the feed, and on the
+  landing card. `inlineMarkdownHTML` emits live links for the feed;
+  `inlineMarkdownText` emits plain text for the landing card and the
+  `<meta>`/`og:description` tags — the card blurb sits inside
+  `<a class="playlist-card">`, and a nested anchor is invalid HTML that breaks
+  the outer link. Hrefs are limited to `http(s):`/`mailto:`; anything else keeps
+  the visible text and drops the link. Entities are decoded first (Spotify
+  serves descriptions HTML-encoded) then escaped exactly once, so markup that
+  arrives encoded stays inert. **A grammar change belongs in both repos** — and
+  note ours parks anchors before the emphasis passes, so a URL containing
+  underscores survives; byom-player does not yet, and bare URLs are not
+  autolinked on either side.
   The RSS feed (`internal/site/feedbody.go`) gives each item a rich HTML body —
   cover art, playlist prose, a meta line, and the first `site.feed_track_limit`
   tracks (default 20) as YouTube links, falling back to an `https://`

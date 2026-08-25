@@ -78,10 +78,12 @@ func itemHTML(n *Node, site SiteMeta) string {
 		b.WriteString(`<p><img src="` + html.EscapeString(cover) +
 			`" alt="` + html.EscapeString(n.Title) + ` cover" width="300"></p>`)
 	}
-	// plainText decodes the HTML entities Spotify serves; EscapeString then
-	// re-encodes exactly once for output.
-	if desc := strings.TrimSpace(plainText(p.Description)); desc != "" {
-		b.WriteString(`<p>` + html.EscapeString(desc) + `</p>`)
+	// inlineMarkdownHTML decodes the entities Spotify serves, escapes exactly
+	// once, and then renders the same small markdown subset byom-player applies
+	// to the JSPF annotation — so a [text](url) in a description is a live link
+	// here too rather than literal brackets.
+	if desc := inlineMarkdownHTML(strings.TrimSpace(p.Description)); desc != "" {
+		b.WriteString(`<p>` + string(desc) + `</p>`)
 	}
 	if meta := playlistMeta(p); meta != "" {
 		b.WriteString(`<p>` + html.EscapeString(meta) + `</p>`)
