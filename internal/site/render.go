@@ -82,6 +82,7 @@ func NewRenderer(site SiteMeta) (*Renderer, error) {
 		"playlistMeta":  playlistMeta,
 		"playlistCover": coverHref,
 		"plainText":     plainText,
+		"inlineText":    inlineMarkdownText,
 		"dirsOf":        dirsOf,
 		"yearGroupsOf":  yearGroupsOf,
 		"featuredOf":    featuredOf,
@@ -201,7 +202,7 @@ func (r *Renderer) renderPlaylist(outDir string, node *Node, crumbs []Crumb) err
 	base := pageData{
 		Site:      r.Site,
 		Title:     node.Title,
-		Desc:      plainText(node.Playlist.Description),
+		Desc:      inlineMarkdownText(node.Playlist.Description),
 		Image:     playlistImage(node.Playlist, r.Site.BaseURL),
 		Canonical: canonical(r.Site.BaseURL, node.Path),
 		Crumbs:    crumbs,
