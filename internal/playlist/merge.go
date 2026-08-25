@@ -24,6 +24,11 @@ const (
 // track's `youtube_id`, `image_file`, `purchase_url`, `spotify` opt-out, and
 // `enrich_candidates`. See adoptLocalFields.
 //
+// Two playlist-level fields are shared rather than purely local — `image` and
+// `description`. Spotify owns both when it sends them, and the local value only
+// fills the gap when it doesn't. Anything Spotify can leave empty needs that
+// treatment, or a sync silently replaces authored content with nothing.
+//
 //	Archive: union by Track.Key(). Remote tracks are marked SpotifyPresent=true
 //	         with any orphan date cleared. Local tracks absent from the remote are
 //	         kept (never deleted): marked SpotifyPresent=false and, if not already
@@ -40,6 +45,14 @@ func Merge(local, remote Playlist, strat Strategy, now time.Time) Playlist {
 	out.ImageFile = local.ImageFile
 	if out.Image == "" {
 		out.Image = local.Image
+	}
+	// Description follows the same rule as Image: Spotify owns it when it sends
+	// one, but most of these playlists have no blurb upstream, so a fetched copy
+	// carries "" and would overwrite hand-authored prose with nothing. That is
+	// not hypothetical — it wiped 30 descriptions on the live hub, they were
+	// restored by hand, and the next nightly run wiped them again.
+	if out.Description == "" {
+		out.Description = local.Description
 	}
 	out.Tracks = make([]Track, 0, len(remote.Tracks))
 
