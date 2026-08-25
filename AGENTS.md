@@ -92,11 +92,15 @@ YouTube resolution cache in `internal/rcache/` — an index, not a source of tru
   breaks — mirroring byom-player's `src/markdown.ts`, which applies the same
   grammar to the JSPF `annotation`. One description string therefore looks the
   same on the playlist page (rendered by the player), in the feed, and on the
-  landing card. `inlineMarkdownHTML` emits live links for the feed;
-  `inlineMarkdownText` emits plain text for the landing card and the
-  `<meta>`/`og:description` tags — the card blurb sits inside
-  `<a class="playlist-card">`, and a nested anchor is invalid HTML that breaks
-  the outer link. Hrefs are limited to `http(s):`/`mailto:`; anything else keeps
+  landing card. `inlineMarkdownHTML` emits live links, used for the feed
+  body and the index-page card blurb; `inlineMarkdownText` emits plain text and
+  is now only for the `<meta>`/`og:description` tags, which must stay unmarked.
+  The index card (`playlistCard` in `landing.html`, shared by the landing page
+  and every folder page via `treeList`) is a `<div>`, not one big anchor: only
+  the cover and the title navigate. That is what lets a description carry links
+  — a card-wide `<a>` would make any anchor in the blurb a nested one, which is
+  invalid HTML and breaks the outer link. The tradeoff is deliberate: clicking
+  the card's whitespace, meta line, or blurb no longer navigates. Hrefs are limited to `http(s):`/`mailto:`; anything else keeps
   the visible text and drops the link. Entities are decoded first (Spotify
   serves descriptions HTML-encoded) then escaped exactly once, so markup that
   arrives encoded stays inert. **A grammar change belongs in both repos** — and

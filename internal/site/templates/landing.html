@@ -34,9 +34,13 @@
 {{end}}
 {{end}}
 
+{{/* The card is a div, not one big anchor: only the cover and the title
+     navigate. That leaves the blurb outside any link, so a [text](url) in a
+     playlist description can render as a real anchor — a nested <a> would be
+     invalid HTML and would break the outer link. */}}
 {{define "playlistCard"}}
-  <a class="playlist-card" href="/{{.Path}}/">
-    {{with playlistCover .Playlist}}<img class="cover" src="{{.}}" alt="" loading="lazy">{{else}}<span class="cover placeholder"></span>{{end}}
-    <span class="body"><span class="title">{{.Title}}</span><span class="meta">{{playlistMeta .Playlist}}</span>{{if .Playlist.Description}}<span class="blurb">{{inlineText .Playlist.Description}}</span>{{end}}</span>
-  </a>
+  <div class="playlist-card">
+    <a class="cover-link" href="/{{.Path}}/">{{with playlistCover .Playlist}}<img class="cover" src="{{.}}" alt="" loading="lazy">{{else}}<span class="cover placeholder"></span>{{end}}</a>
+    <span class="body"><a class="title" href="/{{.Path}}/">{{.Title}}</a><span class="meta">{{playlistMeta .Playlist}}</span>{{if .Playlist.Description}}<span class="blurb">{{inlineHTML .Playlist.Description}}</span>{{end}}</span>
+  </div>
 {{end}}

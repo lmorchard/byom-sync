@@ -82,7 +82,7 @@ func NewRenderer(site SiteMeta) (*Renderer, error) {
 		"playlistMeta":  playlistMeta,
 		"playlistCover": coverHref,
 		"plainText":     plainText,
-		"inlineText":    inlineMarkdownText,
+		"inlineHTML":    inlineMarkdownHTML,
 		"dirsOf":        dirsOf,
 		"yearGroupsOf":  yearGroupsOf,
 		"featuredOf":    featuredOf,
