@@ -191,7 +191,10 @@ func TestRenderCardBlurb(t *testing.T) {
 	}
 	b, _ := os.ReadFile(filepath.Join(out, "index.html"))
 	s := string(b)
-	if !strings.Contains(s, `class="blurb">It&#39;s https://x.test`) {
+	// The blurb is rendered HTML now, not an escaped string, so the apostrophe
+	// stays literal where html/template used to turn it into &#39;. Only
+	// & < > " are escaped, matching byom-player.
+	if !strings.Contains(s, `class="blurb">It's https://x.test`) {
 		t.Error("playlist with description should render a decoded blurb")
 	}
 	if !strings.Contains(s, "https://x.test") {
@@ -202,6 +205,64 @@ func TestRenderCardBlurb(t *testing.T) {
 	}
 	if strings.Count(s, `class="blurb"`) != 1 {
 		t.Errorf("expected exactly one blurb, got %d", strings.Count(s, `class="blurb"`))
+	}
+}
+
+// The card used to be one big <a>, which made a link in the description invalid
+// HTML (a nested anchor breaks the outer link). Only the cover and the title are
+// links now, so the blurb can carry real ones.
+func TestRenderCardLinksOnlyTitleAndCover(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, "README.md"), "# hub\n")
+	mustWrite(t, filepath.Join(dir, "a.yaml"),
+		"title: A\nimage: http://img/1.jpg\ndescription: see [docs](https://e.test/x)\ntracks:\n  - {title: T, artist: X}\n")
+	root, err := BuildTree(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := NewRenderer(testSite())
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := t.TempDir()
+	if err := r.RenderSite(out, root); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(filepath.Join(out, "index.html"))
+	s := string(b)
+
+	// The container is no longer a link.
+	if strings.Contains(s, `<a class="playlist-card"`) {
+		t.Error("card is still an anchor — a link in the blurb would be a nested anchor")
+	}
+	if !strings.Contains(s, `<div class="playlist-card">`) {
+		t.Error("card should render as a div")
+	}
+	// Cover and title still navigate to the playlist.
+	if !strings.Contains(s, `<a class="cover-link" href="/a/">`) {
+		t.Error("cover should link to the playlist")
+	}
+	if !strings.Contains(s, `<a class="title" href="/a/">A</a>`) {
+		t.Error("title should link to the playlist")
+	}
+	// And the description's own link is live.
+	if !strings.Contains(s, `<a href="https://e.test/x" target="_blank" rel="noopener noreferrer">docs</a>`) {
+		t.Errorf("blurb should render a markdown link as an anchor:\n%s", s)
+	}
+	// Within the card itself (not the page, which has header/footer links):
+	// exactly three anchors — cover, title, and the one in the blurb. The card
+	// has no nested <div>, so the first closing tag ends it.
+	start := strings.Index(s, `<div class="playlist-card">`)
+	if start < 0 {
+		t.Fatal("no playlist card in the rendered page")
+	}
+	end := strings.Index(s[start:], "</div>")
+	if end < 0 {
+		t.Fatal("unterminated playlist card")
+	}
+	card := s[start : start+end]
+	if n := strings.Count(card, "<a "); n != 3 {
+		t.Errorf("expected 3 anchors in the card, got %d:\n%s", n, card)
 	}
 }
 
@@ -264,9 +325,15 @@ func TestRenderLanding_FeaturedSection(t *testing.T) {
 	if !strings.Contains(landing, `class="year featured">Featured`) {
 		t.Error("landing missing Featured heading")
 	}
-	// The featured card links to the nested playlist and renders as a normal card.
-	if !strings.Contains(landing, `class="playlist-card" href="/synthpop/bleep-bloop-bop/"`) {
-		t.Error("landing Featured section missing the featured playlist card")
+	// The featured card links to the nested playlist and renders as a normal
+	// card. The link lives on the cover and the title now, not on the card
+	// container — the container is a plain div so the blurb can hold its own
+	// anchors.
+	if !strings.Contains(landing, `<a class="cover-link" href="/synthpop/bleep-bloop-bop/">`) {
+		t.Error("landing Featured section missing the featured playlist cover link")
+	}
+	if !strings.Contains(landing, `<a class="title" href="/synthpop/bleep-bloop-bop/">`) {
+		t.Error("landing Featured section missing the featured playlist title link")
 	}
 	// Featuring is additive: the playlist still appears under its folder, and the
 	// unfeatured root playlist is untouched in its year group.
