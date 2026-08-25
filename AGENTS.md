@@ -147,7 +147,8 @@ errcheck findings CI caught).
 - **Sync must not clobber locally-derived fields.** `Merge` starts from the
   *remote* playlist (`out := remote`), so anything Spotify doesn't send back is
   blank unless explicitly carried over. `Merge` copies playlist-level `featured` +
-  hero art, and `adoptLocalFields` copies each surviving track's `youtube_id`,
+  hero art, keeps the local `description` when the remote sent none, and
+  `adoptLocalFields` copies each surviving track's `youtube_id`,
   `image_file`, `purchase_url`, `spotify` opt-out, and `enrich_candidates`;
   `Image` is the one field where remote wins when non-empty. Without this, a single sync wiped every
   `resolve` result — on the live hub that was 8292 `youtube_id`s and 8318
@@ -156,6 +157,14 @@ errcheck findings CI caught).
   quietly delete it. A side effect worth knowing: because the lookup is by
   `Track.Key()`, duplicate remote entries of the same song (common in
   scrobble-log playlists) all inherit the one local track's resolved ids.
+  **The rule is broader than "locally-derived."** `image` and `description`
+  are *shared* fields — Spotify owns them when it sends them, but most
+  playlists have no blurb or hero upstream, so the fetched copy carries `""`.
+  Treating those as remote-owned wiped 30 hand-authored descriptions on the
+  live hub; they were restored by hand, and the next nightly run wiped them
+  again, because only the data was fixed and not the merge (byom-sync#66).
+  Any field Spotify may leave empty needs the fill-the-gap treatment, not
+  straight assignment.
 - **Dates:** three playlist-level fields. `date_imported` is when byom-sync first
   saw the playlist (Spotify exposes no true creation date); `date_created` and
   `date_updated` are the earliest and latest track `added_at` (all tracks,

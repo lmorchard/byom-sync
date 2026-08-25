@@ -231,6 +231,52 @@ func TestMerge_PreservesLocalPresentationFields(t *testing.T) {
 	}
 }
 
+// A hand-authored playlist description has no Spotify counterpart on most of
+// these playlists, so the fetched copy carries Description="" and a sync used to
+// overwrite the local prose with nothing. This happened twice on the live hub:
+// 30 descriptions were wiped, restored by hand, then wiped again by the next
+// nightly run — silently, with a zero exit code.
+func TestMerge_KeepsLocalDescriptionWhenRemoteHasNone(t *testing.T) {
+	local := Playlist{
+		SpotifyID:   "PID",
+		Description: "Back around 1995-2005 or so, I used to go to a grungy goth club.",
+	}
+	remote := Playlist{SpotifyID: "PID", Title: "New Title"} // Spotify sent no description
+
+	out := Merge(local, remote, Archive, testNow)
+
+	if out.Description != local.Description {
+		t.Errorf("Description = %q, want the local prose preserved", out.Description)
+	}
+}
+
+// The mirror of the above: when Spotify does carry a description it stays
+// authoritative, matching how Image already behaves. Playlists whose blurb is
+// authored on the Spotify side rely on this.
+func TestMerge_RemoteDescriptionWinsWhenPresent(t *testing.T) {
+	local := Playlist{SpotifyID: "PID", Description: "stale local copy"}
+	remote := Playlist{SpotifyID: "PID", Description: "what Spotify says now"}
+
+	out := Merge(local, remote, Archive, testNow)
+
+	if out.Description != "what Spotify says now" {
+		t.Errorf("Description = %q, want remote's", out.Description)
+	}
+}
+
+// Mirror discards local-only tracks, but playlist-level prose is not track data
+// and must survive under both strategies.
+func TestMerge_MirrorKeepsLocalDescription(t *testing.T) {
+	local := Playlist{SpotifyID: "PID", Description: "hand-authored"}
+	remote := Playlist{SpotifyID: "PID"}
+
+	out := Merge(local, remote, Mirror, testNow)
+
+	if out.Description != "hand-authored" {
+		t.Errorf("mirror lost Description: %q", out.Description)
+	}
+}
+
 // purchase_url is locally derived — Spotify never sends it back — so Merge must
 // carry it across or a single sync silently deletes every resolved link.
 func TestMergePreservesPurchaseURL(t *testing.T) {
