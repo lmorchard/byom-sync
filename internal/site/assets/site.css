@@ -31,6 +31,7 @@ body.playlist { padding-top:0.6rem; }
 body.playlist .site-header { margin-bottom:1rem; }
 body.playlist .layout > main { display:flex; flex-direction:column; }
 body.playlist byom-player { flex:1 1 auto; min-height:0; }
+.playlist-download { display:block; flex:none; font-size:.75rem; color:var(--muted); margin-top:.4rem; }
 /* Relocated header/crumb chrome inside the sidebar — shown only inside the
    mobile hamburger overlay (see the media query); hidden on desktop, where the
    header page-nav and in-main crumbs are visible in their normal spots. */

@@ -17,6 +17,7 @@
 <main>
 {{template "crumbs" .}}
 {{template "player" .}}
+<a class="playlist-download" href="{{.JSPFHref}}" download="{{.JSPFDownload}}">download playlist (JSPF)</a>
 <noscript>
   <h1>{{.Title}}</h1>
   <ol class="tracklist">{{range .Playlist.Tracks}}<li>{{.Title}} — {{.Artist}}</li>{{end}}</ol>

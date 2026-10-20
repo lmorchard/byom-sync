@@ -67,6 +67,11 @@ func TestRenderSite(t *testing.T) {
 	if !strings.Contains(pl, `<byom-site-nav>`) {
 		t.Error("playlist page missing nav component")
 	}
+	// The JSPF is offered for download under the playlist's slug, since every
+	// playlist's file is otherwise named playlist.jspf.json.
+	if !strings.Contains(pl, `<a class="playlist-download" href="/synthpop/bleep-bloop-bop/playlist.jspf.json" download="bleep-bloop-bop.jspf.json">`) {
+		t.Error("playlist page missing JSPF download link")
+	}
 	// A nested page shows only its intermediate folder context, linked upward —
 	// and NOT a redundant site-root home crumb (the header already links home).
 	if !strings.Contains(pl, `<nav class="crumbs">`) || !strings.Contains(pl, `href="/synthpop/"`) {
@@ -95,6 +100,9 @@ func TestRenderSite(t *testing.T) {
 	}
 	if strings.Contains(embed, `class="page-nav"`) {
 		t.Error("embed page must not carry the header nav")
+	}
+	if strings.Contains(embed, `class="playlist-download"`) {
+		t.Error("embed page must not carry the JSPF download link")
 	}
 	if !strings.Contains(embed, "<byom-player") || strings.Contains(embed, "<byom-site-nav>") {
 		t.Error("embed should have player but no site nav")
