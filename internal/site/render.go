@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"html/template"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -61,6 +62,9 @@ type playlistData struct {
 	pageData
 	Playlist *playlist.Playlist
 	JSPFHref string
+	// JSPFDownload names the downloaded file after the playlist's slug; every
+	// playlist's JSPF is otherwise saved as the same playlist.jspf.json.
+	JSPFDownload string
 }
 
 type contentPageData struct {
@@ -207,7 +211,12 @@ func (r *Renderer) renderPlaylist(outDir string, node *Node, crumbs []Crumb) err
 		Canonical: canonical(r.Site.BaseURL, node.Path),
 		Crumbs:    crumbs,
 	}
-	data := playlistData{pageData: base, Playlist: node.Playlist, JSPFHref: "/" + node.Path + "/playlist.jspf.json"}
+	data := playlistData{
+		pageData:     base,
+		Playlist:     node.Playlist,
+		JSPFHref:     "/" + node.Path + "/playlist.jspf.json",
+		JSPFDownload: path.Base(node.Path) + ".jspf.json",
+	}
 	if err := r.write(filepath.Join(dir, "index.html"), "playlist.html", data); err != nil {
 		return err
 	}
